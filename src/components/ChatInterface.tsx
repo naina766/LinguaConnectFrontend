@@ -1,6 +1,6 @@
 import { useState, useRef ,useEffect } from "react";
-import { jsPDF } from "jspdf";
-import { Document, Packer, Paragraph, TextRun } from "docx";
+// import { jsPDF } from "jspdf";
+// import { Document, Packer, Paragraph, TextRun } from "docx";
 
 
 import {
@@ -198,17 +198,21 @@ export function ChatInterface() {
     triggerDownload(url, "chat.txt");
   };
 
-  const downloadPDF = () => {
-    const doc = new jsPDF();
-    const text = generateChatText();
+  const downloadPDF = async () => {
+  const { jsPDF } = await import("jspdf");
 
-    const lines = doc.splitTextToSize(text, 180); // wrap text for page width
-    doc.text(lines, 15, 15);
+  const doc = new jsPDF();
+  const text = generateChatText();
 
-    doc.save("chat.pdf");
-  };
+  const lines = doc.splitTextToSize(text, 180);
+  doc.text(lines, 15, 15);
+  doc.save("chat.pdf");
+};
+
 
   const downloadWORD = async () => {
+  const { Document, Packer, Paragraph, TextRun } = await import("docx");
+
   const chatText = generateChatText();
 
   const doc = new Document({
@@ -233,7 +237,6 @@ export function ChatInterface() {
   a.download = "chat.docx";
   a.click();
 };
-
 
   const triggerDownload = (url: string, fileName: string) => {
     const a = document.createElement("a");

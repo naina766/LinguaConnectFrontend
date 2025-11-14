@@ -14,6 +14,15 @@ export default defineConfig({
     target: "esnext",
     outDir: "dist",
   },
+
+  // 🚀 FIX for Vercel build failures
+  optimizeDeps: {
+    exclude: ["docx", "jspdf"],
+  },
+  ssr: {
+    noExternal: ["docx", "jspdf"],
+  },
+
   server: {
     port: 3000,
     open: true,

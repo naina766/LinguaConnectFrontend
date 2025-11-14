@@ -2,8 +2,9 @@
       "name": "lingua-connect",
       "version": "0.1.0",
       "private": true,
+      "type": "module",
       "engines": {
-            "node": "22.x"
+            "node": "20.x"
       },
       "dependencies": {
             "@radix-ui/react-accordion": "^1.2.3",
