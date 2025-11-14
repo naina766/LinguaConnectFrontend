@@ -99,7 +99,27 @@ interface Message {
   id: string;
   text: string;
   sender: "user" | "assistant";
-  timestamp: string;
+  timestamp: number; // epoch ms
+  language: string;
+}
+
+// helpers for storage
+function readStoredMessages(): Message[] {
+  try {
+    const raw = localStorage.getItem("chatMessages");
+    if (!raw) return [];
+    return JSON.parse(raw) as Message[];
+  } catch {
+    return [];
+  }
+}
+
+function writeStoredMessages(msgs: Message[]) {
+  try {
+    localStorage.setItem("chatMessages", JSON.stringify(msgs));
+    // write a small flag to help other tabs detect updates
+    localStorage.setItem("chatUpdatedAt", String(Date.now()));
+  } catch {}
 }
 
 export function ChatInterface() {
@@ -116,7 +136,7 @@ export function ChatInterface() {
   // main states
   const [selectedLanguage, setSelectedLanguage] = useState("en");
   const [inputMessage, setInputMessage] = useState("");
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<Message[]>(() => readStoredMessages());
   const [aiTyping, setAiTyping] = useState(false);
 
   const [listening, setListening] = useState(false);
@@ -152,6 +172,30 @@ export function ChatInterface() {
     isAuthenticated,
   ]);
 
+  // write messages to storage whenever they change
+  useEffect(() => {
+    writeStoredMessages(messages);
+    // Also update a totalConversations count (useful for quick reads)
+    try {
+      const totalUserMsgs = messages.filter((m) => m.sender === "user").length;
+      localStorage.setItem("totalConversations", String(totalUserMsgs));
+    } catch {}
+  }, [messages]);
+
+  // listen for storage events (cross-tab sync)
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === "chatMessages" || e.key === "chatUpdatedAt") {
+        setMessages(readStoredMessages());
+      }
+      if (e.key === "demoMode") setDemoMode(localStorage.getItem("demoMode") === "true");
+      if (e.key === "demoCount") setDemoCount(Number(localStorage.getItem("demoCount") || 0));
+      if (e.key === "isAuthenticated") setIsAuthenticated(localStorage.getItem("isAuthenticated") === "true");
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
   // -----------------------------
   // FILE UPLOAD
   // -----------------------------
@@ -159,15 +203,19 @@ export function ChatInterface() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    setMessages((m) => [
-      ...m,
-      {
-        id: Date.now().toString(),
-        text: `📎 File uploaded: ${file.name}`,
-        sender: "user",
-        timestamp: new Date().toLocaleTimeString(),
-      },
-    ]);
+    const msg: Message = {
+      id: Date.now().toString(),
+      text: `📎 File uploaded: ${file.name}`,
+      sender: "user",
+      timestamp: Date.now(),
+      language: selectedLanguage,
+    };
+
+    setMessages((m) => {
+      const next = [...m, msg];
+      writeStoredMessages(next);
+      return next;
+    });
   };
 
   // -----------------------------
@@ -202,35 +250,48 @@ export function ChatInterface() {
       return;
     }
 
-    // add user message
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: Date.now().toString(),
-        text: inputMessage,
-        sender: "user",
-        timestamp: new Date().toLocaleTimeString(),
-      },
-    ]);
+    const userMsg: Message = {
+      id: Date.now().toString(),
+      text: inputMessage,
+      sender: "user",
+      timestamp: Date.now(),
+      language: selectedLanguage,
+    };
+
+    // add user message and persist
+    setMessages((prev) => {
+      const next = [...prev, userMsg];
+      writeStoredMessages(next);
+      return next;
+    });
 
     // increment demo count
-    if (demoMode) setDemoCount((c) => c + 1);
+    if (demoMode) {
+      const nc = demoCount + 1;
+      setDemoCount(nc);
+      localStorage.setItem("demoCount", String(nc));
+    }
 
     setInputMessage("");
 
     // fake AI reply
     setAiTyping(true);
     setTimeout(() => {
+      const aiMsg: Message = {
+        id: (Date.now() + 1).toString(),
+        text: `AI response in ${selectedLanguage}.`,
+        sender: "assistant",
+        timestamp: Date.now(),
+        language: selectedLanguage,
+      };
+
+      setMessages((prev) => {
+        const next = [...prev, aiMsg];
+        writeStoredMessages(next);
+        return next;
+      });
+
       setAiTyping(false);
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: (Date.now() + 1).toString(),
-          text: `AI response in ${selectedLanguage}.`,
-          sender: "assistant",
-          timestamp: new Date().toLocaleTimeString(),
-        },
-      ]);
     }, 900);
   };
 
@@ -238,7 +299,12 @@ export function ChatInterface() {
   // EXPORT CHAT
   // -----------------------------
   const generateChatText = () =>
-    messages.map((m) => `${m.sender.toUpperCase()}: ${m.text}`).join("\n\n");
+    messages
+      .map((m) => {
+        const t = new Date(m.timestamp).toLocaleString();
+        return `${m.sender.toUpperCase()} (${m.language} @ ${t}): ${m.text}`;
+      })
+      .join("\n\n");
 
   const triggerDownload = (blob: Blob, filename: string) => {
     const url = URL.createObjectURL(blob);
@@ -516,7 +582,7 @@ export function ChatInterface() {
             disabled={demoMode && demoCount >= 10}
           />
 
-          <Button variant="ghost" size="icon">
+          <Button variant="ghost" size="icon" onClick={startVoice}>
             <Mic className="w-5 h-5" />
           </Button>
 
@@ -565,7 +631,13 @@ export function ChatInterface() {
             <Button
               variant="outline"
               className="w-full justify-start text-red-600"
-              onClick={() => setMessages([])}
+              onClick={() => {
+                setMessages([]);
+                writeStoredMessages([]);
+                try {
+                  localStorage.removeItem("totalConversations");
+                } catch {}
+              }}
             >
               End Chat
             </Button>

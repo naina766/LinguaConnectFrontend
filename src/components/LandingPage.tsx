@@ -23,10 +23,66 @@ export function LandingPage({ onNavigate }: LandingPageProps) {
     return localStorage.getItem("demoMode") === "true";
   });
 
-  // Demo count persisted
   const [demoCount, setDemoCount] = useState<number>(() => {
     return Number(localStorage.getItem("demoCount") || 0);
   });
+
+  // ⭐ Dynamic 100+ languages counter
+  const [langCount, setLangCount] = useState(0);
+
+  useEffect(() => {
+    let start = 0;
+    const end = 100;
+    const duration = 1500;
+
+    const counter = setInterval(() => {
+      start += 1;
+      setLangCount(start);
+      if (start >= end) clearInterval(counter);
+    }, duration / end);
+
+    return () => clearInterval(counter);
+  }, []);
+
+  // ⭐ Dynamic USERS counter (STARTS FROM 0)
+  const [userCount, setUserCount] = useState<number>(() => {
+    const saved = localStorage.getItem("userCount");
+    // If stale large value present (e.g. 50k) reset to 0
+    if (saved && Number(saved) > 1000) {
+      localStorage.setItem("userCount", "0");
+      return 0;
+    }
+    return saved ? Number(saved) : 0;
+  });
+
+  // Username (Full Name) shown in navbar
+  const [username, setUsername] = useState<string>(() => {
+    return localStorage.getItem("username") || "";
+  });
+
+  // Increase 1 user every 1 minute
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setUserCount((prev) => {
+        const newVal = prev + 1;
+        localStorage.setItem("userCount", String(newVal));
+        return newVal;
+      });
+    }, 60000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // Increase users by 1 when someone logs in
+  useEffect(() => {
+    if (isAuthenticated) {
+      setUserCount((prev) => {
+        const newVal = prev + 1;
+        localStorage.setItem("userCount", String(newVal));
+        return newVal;
+      });
+    }
+  }, [isAuthenticated]);
 
   useEffect(() => {
     localStorage.setItem("isAuthenticated", isAuthenticated ? "true" : "false");
@@ -39,6 +95,21 @@ export function LandingPage({ onNavigate }: LandingPageProps) {
   useEffect(() => {
     localStorage.setItem("demoCount", String(demoCount));
   }, [demoCount]);
+
+  // keep username persistent to state when storage changes (cross-tab)
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === "username" || e.key === "isAuthenticated") {
+        setUsername(localStorage.getItem("username") || "");
+        setIsAuthenticated(localStorage.getItem("isAuthenticated") === "true");
+      }
+      if (e.key === "userCount") {
+        setUserCount(Number(localStorage.getItem("userCount") || 0));
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
 
   const openLoginModal = () => {
     setAuthMode("login");
@@ -58,13 +129,34 @@ export function LandingPage({ onNavigate }: LandingPageProps) {
     onNavigate("chat");
   };
 
-  const handleAuthSuccess = () => {
+  // onSuccess will now accept optional name (from AuthModal)
+  const handleAuthSuccess = (name?: string) => {
     setIsAuthenticated(true);
     setAuthModalOpen(false);
-    // turn off demo if user logged in
     setDemoMode(false);
     localStorage.setItem("isAuthenticated", "true");
     localStorage.setItem("demoMode", "false");
+
+    if (name) {
+      localStorage.setItem("username", name);
+      setUsername(name);
+    } else {
+      // ensure username state picks up any existing stored name
+      setUsername(localStorage.getItem("username") || "");
+    }
+  };
+
+  // LOGOUT
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+    setDemoMode(false);
+    setDemoCount(0);
+    setUsername("");
+    localStorage.setItem("isAuthenticated", "false");
+    localStorage.setItem("demoMode", "false");
+    localStorage.setItem("demoCount", "0");
+    // remove username on logout
+    localStorage.removeItem("username");
   };
 
   const floatingTexts = [
@@ -90,6 +182,7 @@ export function LandingPage({ onNavigate }: LandingPageProps) {
               </div>
 
               <div className="flex items-center gap-4">
+
                 <button
                   onClick={() => onNavigate("howitworks")}
                   className="text-white hover:text-blue-100 transition"
@@ -112,27 +205,39 @@ export function LandingPage({ onNavigate }: LandingPageProps) {
                 </button>
 
                 {!isAuthenticated && (
-                  <button
-                    onClick={openLoginModal}
-                    className="text-white border border-white/40 px-4 py-1.5 rounded-lg hover:bg-white/10 transition"
-                  >
-                    Login
-                  </button>
-                )}
+                  <>
+                    <button
+                      onClick={openLoginModal}
+                      className="text-white border border-white/40 px-4 py-1.5 rounded-lg hover:bg-white/10 transition"
+                    >
+                      Login
+                    </button>
 
-                {!isAuthenticated && (
-                  <button
-                    onClick={openSignupModal}
-                    className="bg-white text-[#007BFF] px-4 py-1.5 rounded-lg hover:bg-blue-50 transition"
-                  >
-                    Sign Up
-                  </button>
+                    <button
+                      onClick={openSignupModal}
+                      className="bg-white text-[#007BFF] px-4 py-1.5 rounded-lg hover:bg-blue-50 transition"
+                    >
+                      Sign Up
+                    </button>
+                  </>
                 )}
 
                 {isAuthenticated && (
-                  <span className="text-white text-sm px-3 py-1 border border-white rounded-lg">
-                    Logged In
-                  </span>
+                  <>
+                    {/* Greeting style (B) */}
+                    <div className="text-white text-sm px-3 py-1 rounded-lg flex items-center gap-3 select-none">
+                      <span className="text-sm opacity-90">Hello,</span>
+                      <span className="font-medium">{username || "User"}</span>
+                      <span className="animate-wave" style={{ transformOrigin: "70% 70%" }}>👋</span>
+                    </div>
+
+                    <button
+                      onClick={handleLogout}
+                      className="text-white border border-white/40 px-4 py-1.5 rounded-lg hover:bg-white/10 transition"
+                    >
+                      Logout
+                    </button>
+                  </>
                 )}
               </div>
             </div>
@@ -204,15 +309,20 @@ export function LandingPage({ onNavigate }: LandingPageProps) {
             </div>
 
             <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-8">
+
               <div className="bg-white/10 backdrop-blur-md rounded-xl p-6 border border-white/20">
                 <Globe className="w-8 h-8 text-white mx-auto mb-2" />
-                <p className="text-white">100+ Languages</p>
+
+                <p className="text-white">{langCount}+ Languages</p>
+
                 <p className="text-blue-100">Real-time translation</p>
               </div>
 
               <div className="bg-white/10 backdrop-blur-md rounded-xl p-6 border border-white/20">
                 <Users className="w-8 h-8 text-white mx-auto mb-2" />
-                <p className="text-white">50K+ Users</p>
+
+                <p className="text-white">{userCount.toLocaleString()}+ Users</p>
+
                 <p className="text-blue-100">Trusted worldwide</p>
               </div>
 
@@ -221,36 +331,84 @@ export function LandingPage({ onNavigate }: LandingPageProps) {
                 <p className="text-white">Enterprise Security</p>
                 <p className="text-blue-100">SOC 2 compliant</p>
               </div>
+
             </div>
           </div>
         </section>
 
-        <section className="bg-white py-20">
-          <div className="max-w-7xl mx-auto px-4">
-            <div className="text-center mb-12">
-              <h2 className="text-gray-900 text-3xl font-semibold mb-4">Why Choose LinguaConnect?</h2>
-              <p className="text-gray-600 max-w-2xl mx-auto">
-                Everything you need to provide world-class multilingual support
+{/* **********************Features section*********************************** */}
+<section className="bg-white py-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-12">
+            <h2 className="text-gray-900 mb-4">Why Choose LinguaConnect?</h2>
+            <p className="text-gray-600 max-w-2xl mx-auto">
+              Everything you need to provide world-class multilingual support
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            <div className="bg-gradient-to-br from-blue-50 to-white rounded-xl p-8 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
+              <div className="w-12 h-12 bg-gradient-to-br from-[#007BFF] to-[#00B5AD] rounded-lg flex items-center justify-center mb-4">
+                <MessageSquare className="w-6 h-6 text-white" />
+              </div>
+              <h3 className="text-gray-900 mb-2">Real-time Translation</h3>
+              <p className="text-gray-600">
+                Instant AI-powered translation across 100+ languages with context awareness
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {[MessageSquare, BarChart3, Globe, Zap, Shield, Users].map((Icon, i) => (
-                <div
-                  key={i}
-                  className="bg-gradient-to-br from-blue-50 to-white rounded-xl p-8 border border-gray-100 shadow-sm hover:shadow-md"
-                >
-                  <div className="w-12 h-12 bg-gradient-to-br from-[#007BFF] to-[#00B5AD] rounded-lg flex items-center justify-center mb-4">
-                    <Icon className="w-6 h-6 text-white" />
-                  </div>
+            <div className="bg-gradient-to-br from-blue-50 to-white rounded-xl p-8 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
+              <div className="w-12 h-12 bg-gradient-to-br from-[#007BFF] to-[#00B5AD] rounded-lg flex items-center justify-center mb-4">
+                <BarChart3 className="w-6 h-6 text-white" />
+              </div>
+              <h3 className="text-gray-900 mb-2">Analytics Dashboard</h3>
+              <p className="text-gray-600">
+                Track conversations, popular languages, and customer satisfaction metrics
+              </p>
+            </div>
 
-                  <h3 className="text-gray-900 font-semibold mb-2">Feature</h3>
-                  <p className="text-gray-600">Description</p>
-                </div>
-              ))}
+            <div className="bg-gradient-to-br from-blue-50 to-white rounded-xl p-8 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
+              <div className="w-12 h-12 bg-gradient-to-br from-[#007BFF] to-[#00B5AD] rounded-lg flex items-center justify-center mb-4">
+                <Globe className="w-6 h-6 text-white" />
+              </div>
+              <h3 className="text-gray-900 mb-2">Multilingual Knowledge Base</h3>
+              <p className="text-gray-600">
+                Automated FAQ translation and language-specific content management
+              </p>
+            </div>
+
+            <div className="bg-gradient-to-br from-blue-50 to-white rounded-xl p-8 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
+              <div className="w-12 h-12 bg-gradient-to-br from-[#007BFF] to-[#00B5AD] rounded-lg flex items-center justify-center mb-4">
+                <Zap className="w-6 h-6 text-white" />
+              </div>
+              <h3 className="text-gray-900 mb-2">Lightning Fast</h3>
+              <p className="text-gray-600">
+                Sub-second response times powered by optimized AI models
+              </p>
+            </div>
+
+            <div className="bg-gradient-to-br from-blue-50 to-white rounded-xl p-8 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
+              <div className="w-12 h-12 bg-gradient-to-br from-[#007BFF] to-[#00B5AD] rounded-lg flex items-center justify-center mb-4">
+                <Shield className="w-6 h-6 text-white" />
+              </div>
+              <h3 className="text-gray-900 mb-2">Enterprise Security</h3>
+              <p className="text-gray-600">
+                End-to-end encryption and compliance with global data protection laws
+              </p>
+            </div>
+
+            <div className="bg-gradient-to-br from-blue-50 to-white rounded-xl p-8 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
+              <div className="w-12 h-12 bg-gradient-to-br from-[#007BFF] to-[#00B5AD] rounded-lg flex items-center justify-center mb-4">
+                <Users className="w-6 h-6 text-white" />
+              </div>
+              <h3 className="text-gray-900 mb-2">Team Collaboration</h3>
+              <p className="text-gray-600">
+                Multi-agent support with role-based access and conversation routing
+              </p>
             </div>
           </div>
-        </section>
+        </div>
+      </section>
 
         <style>{`
           @keyframes float {
@@ -260,6 +418,20 @@ export function LandingPage({ onNavigate }: LandingPageProps) {
           .animate-float {
             animation: float 3s ease-in-out infinite;
           }
+          /* small wave animation for the emoji */
+          @keyframes wave {
+            0% { transform: rotate(0deg); }
+            15% { transform: rotate(14deg); }
+            30% { transform: rotate(-8deg); }
+            45% { transform: rotate(14deg); }
+            60% { transform: rotate(-4deg); }
+            75% { transform: rotate(10deg); }
+            100% { transform: rotate(0deg); }
+          }
+          .animate-wave {
+            display: inline-block;
+            animation: wave 2s infinite;
+          }
         `}</style>
       </div>
 
@@ -267,7 +439,8 @@ export function LandingPage({ onNavigate }: LandingPageProps) {
         isOpen={authModalOpen}
         onClose={() => setAuthModalOpen(false)}
         initialMode={authMode}
-        onSuccess={handleAuthSuccess}
+        // now onSuccess passes the name (if provided)
+        onSuccess={(name?: string) => handleAuthSuccess(name)}
       />
     </>
   );

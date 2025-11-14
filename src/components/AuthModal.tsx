@@ -1,275 +1,289 @@
 // AuthModal.tsx
-import { useEffect, useState } from "react";
-import { createPortal } from "react-dom";
+import React, { useEffect, useState } from "react";
 import { X } from "lucide-react";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
 
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialMode?: "login" | "signup";
-  onSuccess: () => void;
+  onSuccess?: (fullName?: string) => void; // will receive full name on success
 }
 
-export function AuthModal({
-  isOpen,
-  onClose,
-  initialMode = "login",
-  onSuccess,
-}: AuthModalProps) {
+export function AuthModal({ isOpen, onClose, initialMode = "login", onSuccess }: AuthModalProps) {
   const [mode, setMode] = useState<"login" | "signup">(initialMode);
 
+  // Login fields
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+
+  // Signup fields (U3: Full Name)
+  const [signupFullName, setSignupFullName] = useState("");
+  const [signupEmail, setSignupEmail] = useState("");
+  const [signupPassword, setSignupPassword] = useState("");
+
+  // OTP flow simulation
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpInput, setOtpInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
   useEffect(() => {
-    if (isOpen) setMode(initialMode);
+    setMode(initialMode);
+    // reset fields when opened/closed
+    if (!isOpen) {
+      setLoginEmail("");
+      setLoginPassword("");
+      setSignupFullName("");
+      setSignupEmail("");
+      setSignupPassword("");
+      setOtpSent(false);
+      setOtpInput("");
+      setError("");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, initialMode]);
 
-  // Login
-  const [loginData, setLoginData] = useState({ username: "", password: "" });
-  const handleLogin = () => {
-    if (loginData.username === "demo" && loginData.password === "demo123") {
-      onSuccess();
-    } else {
-      alert("Invalid login.\nUse:\nUsername: demo\nPassword: demo123");
+  // Simple validators
+  const validEmail = (e: string) => /\S+@\S+\.\S+/.test(e);
+  const validPassword = (p: string) => p.length >= 6;
+
+  // Simulate sending OTP
+  const sendOtp = async (email: string) => {
+    setLoading(true);
+    setError("");
+    try {
+      // fake wait
+      await new Promise((res) => setTimeout(res, 700));
+      setOtpSent(true);
+    } catch (e) {
+      setError("Failed to send OTP. Try again.");
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Signup + OTP
-  const [signupData, setSignupData] = useState({
-    fullName: "",
-    username: "",
-    email: "",
-    password: "",
-  });
-  const [showOtpPopup, setShowOtpPopup] = useState(false);
-  const [otp, setOtp] = useState(["", "", "", "", "", ""]);
-  const [otpSuccess, setOtpSuccess] = useState(false);
-
-  const sendOtp = () => {
-    if (
-      !signupData.fullName ||
-      !signupData.username ||
-      !signupData.email ||
-      !signupData.password
-    ) {
-      alert("Please fill all fields before sending OTP.");
+  // Simulate verifying OTP (accept any 4-6 digit input)
+  const verifyOtpAndFinishSignup = async () => {
+    if (!otpInput || otpInput.trim().length < 3) {
+      setError("Enter the OTP sent to your email.");
       return;
     }
-    // In a real app you'd send OTP here. We just open OTP popup.
-    setShowOtpPopup(true);
-  };
-
-  const handleOtpChange = (value: string, index: number) => {
-    if (isNaN(Number(value))) return;
-    const copy = [...otp];
-    copy[index] = value;
-    setOtp(copy);
-    if (value && index < 5) {
-      const next = document.getElementById(`otp-${index + 1}`);
-      next?.focus();
+    setLoading(true);
+    setError("");
+    try {
+      await new Promise((res) => setTimeout(res, 700));
+      // On success: save user data (for demo we only store username)
+      const nameToSave = signupFullName.trim() || signupEmail.split("@")[0];
+      localStorage.setItem("username", nameToSave);
+      localStorage.setItem("isAuthenticated", "true");
+      // Call parent's onSuccess with full name
+      onSuccess?.(nameToSave);
+      // close modal
+      onClose();
+    } catch {
+      setError("OTP verification failed.");
+    } finally {
+      setLoading(false);
     }
   };
 
-  const verifyOtp = () => {
-    const finalOtp = otp.join("");
-    if (finalOtp === "123456") {
-      setOtpSuccess(true);
-      setTimeout(() => {
-        setOtpSuccess(false);
-        setShowOtpPopup(false);
-        onSuccess();
-      }, 900);
-    } else {
-      alert("Invalid OTP. Use: 123456");
+  const handleLogin = async () => {
+    setError("");
+    if (!validEmail(loginEmail)) {
+      setError("Please enter a valid email.");
+      return;
+    }
+    if (!validPassword(loginPassword)) {
+      setError("Password must be at least 6 characters.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // Simulate server auth
+      await new Promise((res) => setTimeout(res, 800));
+
+      // On success: if username saved earlier use it, else set from email local part
+      const existingName = localStorage.getItem("username");
+      const nameToSave = existingName || loginEmail.split("@")[0];
+      localStorage.setItem("username", nameToSave);
+      localStorage.setItem("isAuthenticated", "true");
+
+      onSuccess?.(nameToSave);
+      onClose();
+    } catch {
+      setError("Login failed. Check credentials.");
+    } finally {
+      setLoading(false);
     }
   };
 
-  const modalContent = (
+  const handleSignupStart = async () => {
+    setError("");
+    if (!signupFullName.trim()) {
+      setError("Please enter your full name.");
+      return;
+    }
+    if (!validEmail(signupEmail)) {
+      setError("Please enter a valid email.");
+      return;
+    }
+    if (!validPassword(signupPassword)) {
+      setError("Password must be at least 6 characters.");
+      return;
+    }
+
+    // send otp
+    await sendOtp(signupEmail);
+  };
+
+  return (
     <>
-      <div
-        className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[500]"
-        onClick={onClose}
-      />
-
-      <div className="fixed inset-0 z-[510] flex items-center justify-center p-4">
-        <div
-          className="bg-white rounded-2xl shadow-xl max-w-md w-full animate-fade-in"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="flex items-center justify-between p-6 border-b">
-            <h2 className="text-xl font-semibold">
-              {mode === "login" ? "Login" : "Create Account"}
-            </h2>
-            <button onClick={onClose} className="hover:bg-gray-200 p-1 rounded">
-              <X size={20} />
+      {isOpen && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center">
+          <div className="bg-white rounded-xl w-full max-w-md p-6 shadow-xl relative">
+            <button
+              className="absolute top-3 right-3 text-gray-500 hover:text-gray-700"
+              onClick={() => {
+                setOtpSent(false);
+                onClose();
+              }}
+              aria-label="Close"
+            >
+              <X />
             </button>
-          </div>
 
-          <div className="p-6">
-            {mode === "login" && (
-              <form
-                className="space-y-4"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  handleLogin();
-                }}
-              >
-                <div>
-                  <label className="text-sm font-medium">Username</label>
-                  <input
-                    className="w-full border rounded-lg px-3 py-2"
-                    value={loginData.username}
-                    onChange={(e) =>
-                      setLoginData({ ...loginData, username: e.target.value })
-                    }
-                  />
-                </div>
+            <div className="mb-4">
+              <h2 className="text-lg font-semibold">
+                {mode === "login" ? "Login to LinguaConnect" : "Create an account"}
+              </h2>
+              <p className="text-sm text-gray-500">
+                {mode === "login"
+                  ? "Welcome back — enter your details to continue."
+                  : "Create an account to unlock unlimited access."}
+              </p>
+            </div>
 
-                <div>
-                  <label className="text-sm font-medium">Password</label>
-                  <input
-                    type="password"
-                    className="w-full border rounded-lg px-3 py-2"
-                    value={loginData.password}
-                    onChange={(e) =>
-                      setLoginData({ ...loginData, password: e.target.value })
-                    }
-                  />
-                </div>
+            {mode === "login" ? (
+              <div className="space-y-3">
+                <Input
+                  placeholder="Email"
+                  value={loginEmail}
+                  onChange={(e) => setLoginEmail(e.target.value)}
+                />
+                <Input
+                  placeholder="Password"
+                  type="password"
+                  value={loginPassword}
+                  onChange={(e) => setLoginPassword(e.target.value)}
+                />
 
-                <button
-                  type="submit"
-                  className="w-full border border-blue-600 text-blue-600 py-2 rounded-lg hover:bg-blue-50"
-                >
-                  Login
-                </button>
+                {error && <div className="text-sm text-red-600">{error}</div>}
 
-                <p className="text-center text-sm">
-                  Don’t have an account?{" "}
-                  <span
+                <div className="flex gap-3 mt-4">
+                  <Button className="flex-1" onClick={handleLogin} disabled={loading}>
+                    {loading ? "Logging in..." : "Login"}
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    className="flex-1"
                     onClick={() => setMode("signup")}
-                    className="text-blue-600 cursor-pointer"
                   >
-                    Sign Up
-                  </span>
-                </p>
-              </form>
+                    Create account
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {!otpSent ? (
+                  <>
+                    <Input
+                      placeholder="Full Name"
+                      value={signupFullName}
+                      onChange={(e) => setSignupFullName(e.target.value)}
+                    />
+                    <Input
+                      placeholder="Email"
+                      value={signupEmail}
+                      onChange={(e) => setSignupEmail(e.target.value)}
+                    />
+                    <Input
+                      placeholder="Password"
+                      type="password"
+                      value={signupPassword}
+                      onChange={(e) => setSignupPassword(e.target.value)}
+                    />
+
+                    {error && <div className="text-sm text-red-600">{error}</div>}
+
+                    <div className="flex gap-3 mt-4">
+                      <Button
+                        className="flex-1"
+                        onClick={handleSignupStart}
+                        disabled={loading}
+                      >
+                        {loading ? "Sending OTP..." : "Send OTP"}
+                      </Button>
+
+                      <Button
+                        variant="outline"
+                        className="flex-1"
+                        onClick={() => setMode("login")}
+                      >
+                        Back to Login
+                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  // OTP input view
+                  <>
+                    <div className="text-sm text-gray-700">
+                      OTP sent to <span className="font-medium">{signupEmail}</span>
+                    </div>
+
+                    <Input
+                      placeholder="Enter OTP"
+                      value={otpInput}
+                      onChange={(e) => setOtpInput(e.target.value)}
+                    />
+
+                    {error && <div className="text-sm text-red-600">{error}</div>}
+
+                    <div className="flex gap-3 mt-4">
+                      <Button
+                        className="flex-1"
+                        onClick={verifyOtpAndFinishSignup}
+                        disabled={loading}
+                      >
+                        {loading ? "Verifying..." : "Verify & Create"}
+                      </Button>
+
+                      <Button
+                        variant="outline"
+                        className="flex-1"
+                        onClick={() => {
+                          // allow resending OTP (simple flow)
+                          setOtpSent(false);
+                          setOtpInput("");
+                        }}
+                      >
+                        Edit Details
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </div>
             )}
 
-            {mode === "signup" && (
-              <form
-                className="space-y-4"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                }}
-              >
-                <div>
-                  <label className="text-sm font-medium">Full Name</label>
-                  <input
-                    className="w-full border rounded-lg px-3 py-2"
-                    value={signupData.fullName}
-                    onChange={(e) =>
-                      setSignupData({ ...signupData, fullName: e.target.value })
-                    }
-                  />
-                </div>
-
-                <div>
-                  <label className="text-sm font-medium">Username</label>
-                  <input
-                    className="w-full border rounded-lg px-3 py-2"
-                    value={signupData.username}
-                    onChange={(e) =>
-                      setSignupData({ ...signupData, username: e.target.value })
-                    }
-                  />
-                </div>
-
-                <div>
-                  <label className="text-sm font-medium">Email</label>
-                  <input
-                    type="email"
-                    className="w-full border rounded-lg px-3 py-2"
-                    value={signupData.email}
-                    onChange={(e) =>
-                      setSignupData({ ...signupData, email: e.target.value })
-                    }
-                  />
-                </div>
-
-                <div>
-                  <label className="text-sm font-medium">Password</label>
-                  <input
-                    type="password"
-                    className="w-full border rounded-lg px-3 py-2"
-                    value={signupData.password}
-                    onChange={(e) =>
-                      setSignupData({ ...signupData, password: e.target.value })
-                    }
-                  />
-                </div>
-
-                <button
-                  type="button"
-                  onClick={sendOtp}
-                  className="w-full border border-blue-600 text-blue-600 py-2 rounded-lg hover:bg-blue-50"
-                >
-                  Send OTP
-                </button>
-              </form>
-            )}
+            <div className="mt-4 text-xs text-gray-500">
+              By continuing you agree to our terms and privacy.
+            </div>
           </div>
         </div>
-      </div>
-
-      {showOtpPopup &&
-        createPortal(
-          <div className="fixed inset-0 bg-black/50 z-[600] flex items-center justify-center">
-            <div className="bg-white rounded-xl shadow-lg p-6 w-80">
-              <h3 className="text-xl font-semibold text-center mb-4">Enter OTP</h3>
-
-              <div className="flex justify-between mb-4">
-                {otp.map((digit, index) => (
-                  <input
-                    id={`otp-${index}`}
-                    key={index}
-                    maxLength={1}
-                    value={digit}
-                    onChange={(e) => handleOtpChange(e.target.value, index)}
-                    className="w-10 h-12 border rounded-lg text-center text-lg"
-                  />
-                ))}
-              </div>
-
-              <button
-                onClick={verifyOtp}
-                className="w-full bg-blue-600 text-white py-2 rounded-lg"
-              >
-                Verify OTP
-              </button>
-            </div>
-          </div>,
-          document.body
-        )}
-
-      {otpSuccess &&
-        createPortal(
-          <div className="fixed inset-0 bg-black/40 z-[700] flex items-center justify-center">
-            <div className="bg-white p-4 rounded-lg text-green-600 font-semibold shadow-lg">
-              ✔ Signup Completed Successfully!
-            </div>
-          </div>,
-          document.body
-        )}
-
-      <style>{`
-        @keyframes fadeIn {
-          from { opacity: 0; transform: scale(.95); }
-          to { opacity: 1; transform: scale(1); }
-        }
-        .animate-fade-in { animation: fadeIn .25s ease-out; }
-      `}</style>
+      )}
     </>
   );
-
-  if (!isOpen) return null;
-  return createPortal(modalContent, document.body);
 }
