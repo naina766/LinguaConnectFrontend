@@ -187,3 +187,78 @@
 html {
   font-size: var(--font-size);
 }
+
+/* ------------------------- */
+/* Custom Scrollbar for Chat */
+/* Put this at the end of your global CSS file */
+/* ------------------------- */
+
+/* WebKit browsers (Chrome, Edge, Safari) */
+.custom-scroll {
+  /* ensure you have overflow set on this element */
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* narrow invisible track with rounded thumb */
+.custom-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.custom-scroll::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 8px;
+}
+
+.custom-scroll::-webkit-scrollbar-thumb {
+  background: rgba(16,24,40,0.12); /* subtle color */
+  border-radius: 8px;
+  border: 2px solid transparent; /* gives padding look */
+  background-clip: padding-box;
+}
+
+.custom-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(16,24,40,0.18);
+}
+
+/* Firefox */
+.custom-scroll {
+  scrollbar-width: thin;           /* "auto" or "thin" */
+  scrollbar-color: rgba(16,24,40,0.12) transparent;
+}
+
+/* Optional: slightly shadowed dropdown content on top of page */
+.dropdown-custom-surface {
+  background: var(--color-popover, #fff);
+  border-radius: 12px;
+  box-shadow: 0 6px 20px rgba(2,6,23,0.08), 0 2px 6px rgba(2,6,23,0.04);
+  border: 1px solid rgba(2,6,23,0.06);
+}
+
+/* ========================= */
+/* Mic Waveform Animations   */
+/* ========================= */
+
+@keyframes pulseRing {
+  0% {
+    transform: scale(0.9);
+    opacity: 0.6;
+  }
+  100% {
+    transform: scale(1.4);
+    opacity: 0;
+  }
+}
+
+@keyframes wave {
+  0% {
+    transform: scaleY(0.3);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+  100% {
+    transform: scaleY(0.3);
+  }
+}
