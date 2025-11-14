@@ -44,10 +44,9 @@ export function LandingPage({ onNavigate }: LandingPageProps) {
     return () => clearInterval(counter);
   }, []);
 
-  // ⭐ Dynamic USERS counter (STARTS FROM 0)
+  // ⭐ Dynamic USERS counter
   const [userCount, setUserCount] = useState<number>(() => {
     const saved = localStorage.getItem("userCount");
-    // If stale large value present (e.g. 50k) reset to 0
     if (saved && Number(saved) > 1000) {
       localStorage.setItem("userCount", "0");
       return 0;
@@ -55,31 +54,30 @@ export function LandingPage({ onNavigate }: LandingPageProps) {
     return saved ? Number(saved) : 0;
   });
 
-  // Username (Full Name) shown in navbar
+  // Username stored in navbar
   const [username, setUsername] = useState<string>(() => {
     return localStorage.getItem("username") || "";
   });
 
-  // Increase 1 user every 1 minute
+  // Auto-increase users every 1 min
   useEffect(() => {
     const interval = setInterval(() => {
       setUserCount((prev) => {
-        const newVal = prev + 1;
-        localStorage.setItem("userCount", String(newVal));
-        return newVal;
+        const n = prev + 1;
+        localStorage.setItem("userCount", String(n));
+        return n;
       });
     }, 60000);
-
     return () => clearInterval(interval);
   }, []);
 
-  // Increase users by 1 when someone logs in
+  // Increase userCount on login
   useEffect(() => {
     if (isAuthenticated) {
       setUserCount((prev) => {
-        const newVal = prev + 1;
-        localStorage.setItem("userCount", String(newVal));
-        return newVal;
+        const n = prev + 1;
+        localStorage.setItem("userCount", String(n));
+        return n;
       });
     }
   }, [isAuthenticated]);
@@ -96,16 +94,12 @@ export function LandingPage({ onNavigate }: LandingPageProps) {
     localStorage.setItem("demoCount", String(demoCount));
   }, [demoCount]);
 
-  // keep username persistent to state when storage changes (cross-tab)
+  // Sync cross-tabs
   useEffect(() => {
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === "username" || e.key === "isAuthenticated") {
-        setUsername(localStorage.getItem("username") || "");
-        setIsAuthenticated(localStorage.getItem("isAuthenticated") === "true");
-      }
-      if (e.key === "userCount") {
-        setUserCount(Number(localStorage.getItem("userCount") || 0));
-      }
+    const onStorage = () => {
+      setUsername(localStorage.getItem("username") || "");
+      setIsAuthenticated(localStorage.getItem("isAuthenticated") === "true");
+      setUserCount(Number(localStorage.getItem("userCount") || 0));
     };
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
@@ -129,7 +123,6 @@ export function LandingPage({ onNavigate }: LandingPageProps) {
     onNavigate("chat");
   };
 
-  // onSuccess will now accept optional name (from AuthModal)
   const handleAuthSuccess = (name?: string) => {
     setIsAuthenticated(true);
     setAuthModalOpen(false);
@@ -141,12 +134,10 @@ export function LandingPage({ onNavigate }: LandingPageProps) {
       localStorage.setItem("username", name);
       setUsername(name);
     } else {
-      // ensure username state picks up any existing stored name
       setUsername(localStorage.getItem("username") || "");
     }
   };
 
-  // LOGOUT
   const handleLogout = () => {
     setIsAuthenticated(false);
     setDemoMode(false);
@@ -155,7 +146,6 @@ export function LandingPage({ onNavigate }: LandingPageProps) {
     localStorage.setItem("isAuthenticated", "false");
     localStorage.setItem("demoMode", "false");
     localStorage.setItem("demoCount", "0");
-    // remove username on logout
     localStorage.removeItem("username");
   };
 
@@ -171,6 +161,8 @@ export function LandingPage({ onNavigate }: LandingPageProps) {
   return (
     <>
       <div className="min-h-screen bg-gradient-to-br from-[#007BFF] via-[#0056b3] to-[#00B5AD] overflow-x-hidden">
+        
+        {/* ---------------- NAVBAR ---------------- */}
         <nav className="absolute top-0 left-0 right-0 z-50">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex items-center justify-between h-16">
@@ -197,12 +189,19 @@ export function LandingPage({ onNavigate }: LandingPageProps) {
                   Knowledge Base
                 </button>
 
-                <button
-                  onClick={() => onNavigate("dashboard")}
-                  className="text-white hover:text-blue-100 transition"
+                {/* ⭐ UPDATED DASHBOARD BUTTON ⭐ */}
+                <Button
+                  size="lg"
+                  onClick={() => isAuthenticated && onNavigate("dashboard")}
+                  disabled={!isAuthenticated}
+                  className={
+                    "bg-white text-[#007BFF] px-4 py-1.5 rounded-lg " +
+                    (!isAuthenticated ? "opacity-50 cursor-not-allowed" : "hover:bg-blue-50")
+                  }
                 >
-                  Dashboard
-                </button>
+                  <BarChart3 className="w-5 h-5 mr-2" />
+                  {isAuthenticated ? "Dashboard" : "Login to View Dashboard"}
+                </Button>
 
                 {!isAuthenticated && (
                   <>
@@ -224,7 +223,6 @@ export function LandingPage({ onNavigate }: LandingPageProps) {
 
                 {isAuthenticated && (
                   <>
-                    {/* Greeting style (B) */}
                     <div className="text-white text-sm px-3 py-1 rounded-lg flex items-center gap-3 select-none">
                       <span className="text-sm opacity-90">Hello,</span>
                       <span className="font-medium">{username || "User"}</span>
@@ -244,7 +242,9 @@ export function LandingPage({ onNavigate }: LandingPageProps) {
           </div>
         </nav>
 
+        {/* ---------------- HERO SECTION ---------------- */}
         <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
+
           <div className="absolute inset-0 opacity-10">
             <ImageWithFallback
               src="https://images.unsplash.com/photo-1609868714484-2b2556006301"
@@ -281,10 +281,12 @@ export function LandingPage({ onNavigate }: LandingPageProps) {
             </h1>
 
             <p className="text-blue-100 mb-8 max-w-2xl mx-auto">
-              AI-powered multilingual support for global businesses. Break language barriers and provide exceptional customer service.
+              AI-powered multilingual support for global businesses.
             </p>
 
             <div className="flex items-center justify-center gap-4 flex-wrap">
+
+              {/* ⭐ CHAT BUTTON LOCKED UNTIL LOGIN ⭐ */}
               <Button
                 size="lg"
                 onClick={() => isAuthenticated && onNavigate("chat")}
@@ -308,21 +310,17 @@ export function LandingPage({ onNavigate }: LandingPageProps) {
               </Button>
             </div>
 
+            {/* COUNTERS */}
             <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-8">
-
               <div className="bg-white/10 backdrop-blur-md rounded-xl p-6 border border-white/20">
                 <Globe className="w-8 h-8 text-white mx-auto mb-2" />
-
                 <p className="text-white">{langCount}+ Languages</p>
-
                 <p className="text-blue-100">Real-time translation</p>
               </div>
 
               <div className="bg-white/10 backdrop-blur-md rounded-xl p-6 border border-white/20">
                 <Users className="w-8 h-8 text-white mx-auto mb-2" />
-
                 <p className="text-white">{userCount.toLocaleString()}+ Users</p>
-
                 <p className="text-blue-100">Trusted worldwide</p>
               </div>
 
@@ -331,85 +329,82 @@ export function LandingPage({ onNavigate }: LandingPageProps) {
                 <p className="text-white">Enterprise Security</p>
                 <p className="text-blue-100">SOC 2 compliant</p>
               </div>
+            </div>
+          </div>
+        </section>
+
+        {/* FEATURES SECTION */}
+        <section className="bg-white py-20">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="text-center mb-12">
+              <h2 className="text-gray-900 mb-4">Why Choose LinguaConnect?</h2>
+              <p className="text-gray-600 max-w-2xl mx-auto">
+                Everything you need to provide world-class multilingual support
+              </p>
+            </div>
+
+            {/* 6 Feature Cards — COPY OF YOUR UI */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+
+              <div className="bg-gradient-to-br from-blue-50 to-white rounded-xl p-8 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
+                <div className="w-12 h-12 bg-gradient-to-br from-[#007BFF] to-[#00B5AD] rounded-lg flex items-center justify-center mb-4">
+                  <MessageSquare className="w-6 h-6 text-white" />
+                </div>
+                <h3 className="text-gray-900 mb-2">Real-time Translation</h3>
+                <p className="text-gray-600">
+                  Instant AI-powered translation across 100+ languages
+                </p>
+              </div>
+
+              <div className="bg-gradient-to-br from-blue-50 to-white rounded-xl p-8 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
+                <div className="w-12 h-12 bg-gradient-to-br from-[#007BFF] to-[#00B5AD] rounded-lg flex items-center justify-center mb-4">
+                  <BarChart3 className="w-6 h-6 text-white" />
+                </div>
+                <h3 className="text-gray-900 mb-2">Analytics Dashboard</h3>
+                <p className="text-gray-600">
+                  Track conversations, languages, satisfaction metrics
+                </p>
+              </div>
+
+              <div className="bg-gradient-to-br from-blue-50 to-white rounded-xl p-8 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
+                <div className="w-12 h-12 bg-gradient-to-br from-[#007BFF] to-[#00B5AD] rounded-lg flex items-center justify-center mb-4">
+                  <Globe className="w-6 h-6 text-white" />
+                </div>
+                <h3 className="text-gray-900 mb-2">Multilingual Knowledge Base</h3>
+                <p className="text-gray-600">
+                  Automated FAQ translation and content management
+                </p>
+              </div>
+
+              <div className="bg-gradient-to-br from-blue-50 to-white rounded-xl p-8 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
+                <div className="w-12 h-12 bg-gradient-to-br from-[#007BFF] to-[#00B5AD] rounded-lg flex items-center justify-center mb-4">
+                  <Zap className="w-6 h-6 text-white" />
+                </div>
+                <h3 className="text-gray-900 mb-2">Lightning Fast</h3>
+                <p className="text-gray-600">Sub-second response times</p>
+              </div>
+
+              <div className="bg-gradient-to-br from-blue-50 to-white rounded-xl p-8 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
+                <div className="w-12 h-12 bg-gradient-to-br from-[#007BFF] to-[#00B5AD] rounded-lg flex items-center justify-center mb-4">
+                  <Shield className="w-6 h-6 text-white" />
+                </div>
+                <h3 className="text-gray-900 mb-2">Enterprise Security</h3>
+                <p className="text-gray-600">End-to-end encryption</p>
+              </div>
+
+              <div className="bg-gradient-to-br from-blue-50 to-white rounded-xl p-8 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
+                <div className="w-12 h-12 bg-gradient-to-br from-[#007BFF] to-[#00B5AD] rounded-lg flex items-center justify-center mb-4">
+                  <Users className="w-6 h-6 text-white" />
+                </div>
+                <h3 className="text-gray-900 mb-2">Team Collaboration</h3>
+                <p className="text-gray-600">Role-based access, routing</p>
+              </div>
 
             </div>
           </div>
         </section>
 
-{/* **********************Features section*********************************** */}
-<section className="bg-white py-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-12">
-            <h2 className="text-gray-900 mb-4">Why Choose LinguaConnect?</h2>
-            <p className="text-gray-600 max-w-2xl mx-auto">
-              Everything you need to provide world-class multilingual support
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            <div className="bg-gradient-to-br from-blue-50 to-white rounded-xl p-8 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
-              <div className="w-12 h-12 bg-gradient-to-br from-[#007BFF] to-[#00B5AD] rounded-lg flex items-center justify-center mb-4">
-                <MessageSquare className="w-6 h-6 text-white" />
-              </div>
-              <h3 className="text-gray-900 mb-2">Real-time Translation</h3>
-              <p className="text-gray-600">
-                Instant AI-powered translation across 100+ languages with context awareness
-              </p>
-            </div>
-
-            <div className="bg-gradient-to-br from-blue-50 to-white rounded-xl p-8 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
-              <div className="w-12 h-12 bg-gradient-to-br from-[#007BFF] to-[#00B5AD] rounded-lg flex items-center justify-center mb-4">
-                <BarChart3 className="w-6 h-6 text-white" />
-              </div>
-              <h3 className="text-gray-900 mb-2">Analytics Dashboard</h3>
-              <p className="text-gray-600">
-                Track conversations, popular languages, and customer satisfaction metrics
-              </p>
-            </div>
-
-            <div className="bg-gradient-to-br from-blue-50 to-white rounded-xl p-8 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
-              <div className="w-12 h-12 bg-gradient-to-br from-[#007BFF] to-[#00B5AD] rounded-lg flex items-center justify-center mb-4">
-                <Globe className="w-6 h-6 text-white" />
-              </div>
-              <h3 className="text-gray-900 mb-2">Multilingual Knowledge Base</h3>
-              <p className="text-gray-600">
-                Automated FAQ translation and language-specific content management
-              </p>
-            </div>
-
-            <div className="bg-gradient-to-br from-blue-50 to-white rounded-xl p-8 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
-              <div className="w-12 h-12 bg-gradient-to-br from-[#007BFF] to-[#00B5AD] rounded-lg flex items-center justify-center mb-4">
-                <Zap className="w-6 h-6 text-white" />
-              </div>
-              <h3 className="text-gray-900 mb-2">Lightning Fast</h3>
-              <p className="text-gray-600">
-                Sub-second response times powered by optimized AI models
-              </p>
-            </div>
-
-            <div className="bg-gradient-to-br from-blue-50 to-white rounded-xl p-8 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
-              <div className="w-12 h-12 bg-gradient-to-br from-[#007BFF] to-[#00B5AD] rounded-lg flex items-center justify-center mb-4">
-                <Shield className="w-6 h-6 text-white" />
-              </div>
-              <h3 className="text-gray-900 mb-2">Enterprise Security</h3>
-              <p className="text-gray-600">
-                End-to-end encryption and compliance with global data protection laws
-              </p>
-            </div>
-
-            <div className="bg-gradient-to-br from-blue-50 to-white rounded-xl p-8 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
-              <div className="w-12 h-12 bg-gradient-to-br from-[#007BFF] to-[#00B5AD] rounded-lg flex items-center justify-center mb-4">
-                <Users className="w-6 h-6 text-white" />
-              </div>
-              <h3 className="text-gray-900 mb-2">Team Collaboration</h3>
-              <p className="text-gray-600">
-                Multi-agent support with role-based access and conversation routing
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
+        {/* Animations */}
         <style>{`
           @keyframes float {
             0%, 100% { transform: translateY(0); }
@@ -418,7 +413,6 @@ export function LandingPage({ onNavigate }: LandingPageProps) {
           .animate-float {
             animation: float 3s ease-in-out infinite;
           }
-          /* small wave animation for the emoji */
           @keyframes wave {
             0% { transform: rotate(0deg); }
             15% { transform: rotate(14deg); }
@@ -433,13 +427,14 @@ export function LandingPage({ onNavigate }: LandingPageProps) {
             animation: wave 2s infinite;
           }
         `}</style>
+
       </div>
 
+      {/* AUTH MODAL */}
       <AuthModal
         isOpen={authModalOpen}
         onClose={() => setAuthModalOpen(false)}
         initialMode={authMode}
-        // now onSuccess passes the name (if provided)
         onSuccess={(name?: string) => handleAuthSuccess(name)}
       />
     </>
