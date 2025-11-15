@@ -57,11 +57,10 @@ export function AuthModal({
   const validPassword = (p: string) => p.length >= 6;
 
   // =======================
-  // 🌟 SAVE USER FUNCTION
+  // SAVE USER FUNCTION
   // =======================
   const saveUserData = (name: string, email: string, method: "password" | "otp") => {
     const timestamp = new Date().toISOString();
-
     const userId = crypto.randomUUID();
 
     const userData = {
@@ -72,7 +71,7 @@ export function AuthModal({
       method,
     };
 
-    // Save current user session
+    // SESSION
     localStorage.setItem("username", name);
     localStorage.setItem("userEmail", email);
     localStorage.setItem("userId", userId);
@@ -80,15 +79,22 @@ export function AuthModal({
     localStorage.setItem("isAuthenticated", "true");
     localStorage.setItem("lastLogin", timestamp);
 
-    // Add to users database
+    // ============================
+    // 🔥 ADMIN CHECK
+    // ============================
+    if (email === "admin123@gmail.com" && (loginPassword === "admin123" || signupPassword === "admin123")) {
+      localStorage.setItem("isAdmin", "true");
+    } else {
+      localStorage.setItem("isAdmin", "false");
+    }
+
+    // ADD USER TO DB
     const existingUsers = JSON.parse(localStorage.getItem("users") || "[]");
     const updatedUsers = [...existingUsers, userData];
     localStorage.setItem("users", JSON.stringify(updatedUsers));
   };
 
-  // =======================
   // SEND OTP
-  // =======================
   const sendOtp = async (email: string) => {
     setLoading(true);
     setError("");
@@ -102,9 +108,7 @@ export function AuthModal({
     }
   };
 
-  // =======================
   // VERIFY OTP
-  // =======================
   const verifyOtpAndFinishSignup = async () => {
     if (!otpInput.trim()) {
       setError("Enter the OTP sent to your email.");
@@ -119,7 +123,6 @@ export function AuthModal({
 
       const name = signupFullName.trim() || signupEmail.split("@")[0];
 
-      // Save user with OTP method
       saveUserData(name, signupEmail, "otp");
 
       onSuccess?.(name);
@@ -152,10 +155,8 @@ export function AuthModal({
       await new Promise((r) => setTimeout(r, 800));
 
       const nameFromEmail = loginEmail.split("@")[0];
-      const existingName = localStorage.getItem("username");
-      const finalName = existingName || nameFromEmail;
+      const finalName = localStorage.getItem("username") || nameFromEmail;
 
-      // save login info
       saveUserData(finalName, loginEmail, "password");
 
       onSuccess?.(finalName);
@@ -167,9 +168,7 @@ export function AuthModal({
     }
   };
 
-  // =======================
   // SIGNUP START → OTP
-  // =======================
   const handleSignupStart = async () => {
     setError("");
 
@@ -189,6 +188,9 @@ export function AuthModal({
     await sendOtp(signupEmail);
   };
 
+  // =======================
+  // UI RETURN
+  // =======================
   return (
     <>
       {isOpen && (
@@ -251,7 +253,6 @@ export function AuthModal({
               </div>
             ) : (
               <div className="space-y-3">
-                {/* SIGNUP FIELDS */}
                 {!otpSent ? (
                   <>
                     <Input
@@ -289,10 +290,8 @@ export function AuthModal({
                   </>
                 ) : (
                   <>
-                    {/* OTP STEP */}
                     <div className="text-sm text-gray-700">
-                      OTP sent to{" "}
-                      <span className="font-medium">{signupEmail}</span>
+                      OTP sent to <span className="font-medium">{signupEmail}</span>
                     </div>
 
                     <Input

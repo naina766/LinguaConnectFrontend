@@ -1,5 +1,5 @@
 // AdminDashboard.tsx
-import { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   MessageSquare,
   Globe,
@@ -13,8 +13,12 @@ import {
   X as XIcon,
 } from "lucide-react";
 
+// Use the browser-friendly mammoth import for frontend docx parsing
+import * as mammoth from "mammoth/mammoth.browser";
+
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+
 import {
   BarChart,
   Bar,
@@ -30,26 +34,29 @@ import {
   Line,
 } from "recharts";
 
-/**
- * Updated AdminDashboard.tsx
- * - "View Reports" opens an in-page popup modal (no navigation)
- * - Modal shows dynamic analytics and a scrollable message table
- * - Filters: time-range and text search
- * - Download JSON / CSV of filtered messages or whole report
- * - Uses localStorage keys:
- *    - chatMessages (array of { id, timestamp, sender, language, text, ... })
- *    - userCount
- *    - languages
- *    - faqs
- *
- * Copy-paste to replace your existing AdminDashboard.tsx
- */
+/** ====== Types ====== **/
+interface Message {
+  id: string;
+  sender: "user" | "assistant";
+  text: string;
+  timestamp: number;
+  language: string;
+}
 
-// ---------- helpers ----------
-const readMessages = (): any[] => {
+interface FAQ {
+  id: string | number;
+  title?: string;
+  content?: string;
+  category?: string;
+  // preserve any uploaded raw fields
+  [k: string]: any;
+}
+
+/** ====== Local storage helpers (typed) ====== **/
+const readMessages = (): Message[] => {
   try {
     const raw = localStorage.getItem("chatMessages");
-    return raw ? JSON.parse(raw) : [];
+    return raw ? (JSON.parse(raw) as Message[]) : [];
   } catch {
     return [];
   }
@@ -58,51 +65,67 @@ const readMessages = (): any[] => {
 const readLanguages = (): string[] => {
   try {
     const raw = localStorage.getItem("languages");
-    return raw ? JSON.parse(raw) : ["English", "Hindi", "Spanish"];
+    return raw ? (JSON.parse(raw) as string[]) : ["English", "Hindi", "Spanish"];
   } catch {
     return ["English", "Hindi", "Spanish"];
   }
 };
 
-const readFaqs = (): any[] => {
+const readFaqs = (): FAQ[] => {
   try {
     const raw = localStorage.getItem("faqs");
-    return raw ? JSON.parse(raw) : [];
+    return raw ? (JSON.parse(raw) as FAQ[]) : [];
   } catch {
     return [];
   }
 };
 
-// ---------- component ----------
-export function AdminDashboard() {
-  // auth redirect (hard)
+/** ====== DOCX helper using mammoth.browser ====== **/
+const extractDocxText = async (file: File): Promise<string> => {
+  const arrayBuffer = await file.arrayBuffer();
+  // mammoth.extractRawText accepts {arrayBuffer}
+  const result = await (mammoth as any).extractRawText({ arrayBuffer });
+  return result?.value || "";
+};
+
+/** ====== Component ====== **/
+export function AdminDashboard(): JSX.Element | null {
+  // require authentication (existing behavior)
   const isAuthenticated = localStorage.getItem("isAuthenticated") === "true";
   if (!isAuthenticated) {
     window.location.href = "/";
     return null;
   }
 
+  // admin flag (set isAdmin in localStorage: "true" for admin)
+  const isAdmin = localStorage.getItem("isAdmin") === "true";
+
   // core state
-  const [messages, setMessages] = useState<any[]>(() => readMessages());
-  const [userCount, setUserCount] = useState<number>(() => Number(localStorage.getItem("userCount") || 0));
+  const [messages, setMessages] = useState<Message[]>(() => readMessages());
+  const [userCount, setUserCount] = useState<number>(() =>
+    Number(localStorage.getItem("userCount") || 0)
+  );
   const [languages, setLanguages] = useState<string[]>(() => readLanguages());
-  const [faqs, setFaqs] = useState<any[]>(() => readFaqs());
+  const [faqs, setFaqs] = useState<FAQ[]>(() => readFaqs());
 
-  const [timeRange, setTimeRange] = useState<"24h" | "7d" | "30d" | "90d">("7d");
+  // time range
+  const [timeRange, setTimeRange] = useState<"24h" | "7d" | "30d" | "90d">(
+    "7d"
+  );
 
-  // UI: reports modal
+  // reports modal state
   const [reportsOpen, setReportsOpen] = useState(false);
   const [reportSearch, setReportSearch] = useState("");
-  const [reportLanguageFilter, setReportLanguageFilter] = useState<string>(""); // "" = all
-  const [reportPage, setReportPage] = useState(1);
+  const [reportLanguageFilter, setReportLanguageFilter] = useState<string>("");
+  const [reportPage, setReportPage] = useState<number>(1);
   const rowsPerPage = 12;
 
-  // file input for FAQ upload
   const fileRef = useRef<HTMLInputElement | null>(null);
 
-  // keep local state synced to localStorage across tabs
+  // sync across tabs (storage)
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
+      // update full local state on storage changes (or when key is omitted)
       if (!e.key || e.key === "chatMessages") setMessages(readMessages());
       if (!e.key || e.key === "userCount") setUserCount(Number(localStorage.getItem("userCount") || 0));
       if (!e.key || e.key === "languages") setLanguages(readLanguages());
@@ -112,12 +135,12 @@ export function AdminDashboard() {
     return () => window.removeEventListener("storage", onStorage);
   }, []);
 
-  // keep localStorage in sync when we update messages/languages/faqs locally
+  // persist when things change
   useEffect(() => localStorage.setItem("chatMessages", JSON.stringify(messages)), [messages]);
   useEffect(() => localStorage.setItem("languages", JSON.stringify(languages)), [languages]);
   useEffect(() => localStorage.setItem("faqs", JSON.stringify(faqs)), [faqs]);
 
-  // ---------------- analytics calculations ----------------
+  /** ====== Analytics calculations ====== **/
   const now = Date.now();
   const rangeMillis: Record<string, number> = {
     "24h": 24 * 60 * 60 * 1000,
@@ -130,11 +153,11 @@ export function AdminDashboard() {
     return messages.filter((m) => now - (m.timestamp || 0) <= rangeMillis[timeRange]);
   }, [messages, timeRange, now]);
 
-  // counts
   const totalConversations = filteredByTime.filter((m) => m.sender === "user").length;
   const uniqueUsers = userCount;
 
-  const languageCounts = useMemo(() => {
+  // language counts with index signature
+  const languageCounts = useMemo((): Record<string, number> => {
     const obj: Record<string, number> = {};
     filteredByTime.forEach((m) => {
       const lang = m.language || "Unknown";
@@ -144,13 +167,13 @@ export function AdminDashboard() {
   }, [filteredByTime]);
 
   const topLanguages = Object.keys(languageCounts).length;
+
   const conversationsByLanguage = Object.keys(languageCounts).map((lang) => ({
     language: lang,
     count: languageCounts[lang],
     fill: "#007BFF",
   }));
 
-  // avg response time (user -> assistant)
   const avgResponseTime = useMemo(() => {
     let totalRT = 0;
     let rtCount = 0;
@@ -159,7 +182,7 @@ export function AdminDashboard() {
       if (m.sender === "user") {
         const next = filteredByTime[i + 1];
         if (next && next.sender === "assistant") {
-          totalRT += next.timestamp - m.timestamp;
+          totalRT += (next.timestamp || 0) - (m.timestamp || 0);
           rtCount++;
         }
       }
@@ -180,7 +203,7 @@ export function AdminDashboard() {
     return days.map((d) => ({ day: d, conversations: map[d].conversations, translations: map[d].translations }));
   }, [filteredByTime]);
 
-  // language distribution (pie)
+  // language distribution
   const languageDistribution = useMemo(() => {
     const keys = Object.keys(languageCounts);
     if (keys.length === 0) return languages.map((l) => ({ name: l, value: 0, color: "#" + Math.floor(Math.random() * 16777215).toString(16) }));
@@ -188,10 +211,9 @@ export function AdminDashboard() {
     return keys.map((k) => ({ name: k, value: Number(((languageCounts[k] / total) * 100).toFixed(1)), color: "#" + Math.floor(Math.random() * 16777215).toString(16) }));
   }, [languageCounts, filteredByTime.length, languages]);
 
-  // ---------------- Reports modal: filtering + pagination ----------------
-  // create a derived list of messages according to modal filters
+  /** ====== Reports modal filtering & pagination ====== **/
   const modalFilteredMessages = useMemo(() => {
-    let list = [...filteredByTime]; // already time-filtered globally by header timeRange
+    let list = [...filteredByTime]; // already time-filtered by header timeRange
     if (reportLanguageFilter) list = list.filter((m) => (m.language || "Unknown") === reportLanguageFilter);
     if (reportSearch && reportSearch.trim().length > 0) {
       const q = reportSearch.trim().toLowerCase();
@@ -207,15 +229,66 @@ export function AdminDashboard() {
   const pageCount = Math.max(1, Math.ceil(modalFilteredMessages.length / rowsPerPage));
   useEffect(() => {
     if (reportPage > pageCount) setReportPage(1);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pageCount]);
+  }, [pageCount, reportPage]);
 
   const pagedMessages = useMemo(() => {
     const start = (reportPage - 1) * rowsPerPage;
     return modalFilteredMessages.slice(start, start + rowsPerPage);
   }, [modalFilteredMessages, reportPage]);
 
-  // ---------------- actions: exports / uploads / clear ----------------
+  /** ====== FILE UPLOAD (JSON / TXT / DOCX) — ADMIN ONLY ====== **/
+  const handleFaqFile = async (file?: File | null) => {
+    if (!file) return;
+    const name = file.name || "upload";
+    const ext = name.split(".").pop()?.toLowerCase() || "";
+
+    try {
+      if (ext === "json") {
+        const txt = await file.text();
+        const parsed = JSON.parse(txt);
+        const nextFaqs = Array.isArray(parsed) ? [...faqs, ...parsed] : [...faqs, parsed];
+        setFaqs(nextFaqs);
+        localStorage.setItem("faqs", JSON.stringify(nextFaqs));
+        alert("FAQs uploaded (JSON).");
+        return;
+      }
+
+      if (ext === "txt") {
+        const txt = await file.text();
+        const entry: FAQ = { id: Date.now(), title: name.replace(/\.txt$/i, ""), content: txt, category: "general" };
+        const nextFaqs = [...faqs, entry];
+        setFaqs(nextFaqs);
+        localStorage.setItem("faqs", JSON.stringify(nextFaqs));
+        alert("FAQ uploaded (TXT).");
+        return;
+      }
+
+      if (ext === "docx") {
+        const extracted = await extractDocxText(file);
+        const entry: FAQ = { id: Date.now(), title: name.replace(/\.docx$/i, ""), content: extracted, category: "general" };
+        const nextFaqs = [...faqs, entry];
+        setFaqs(nextFaqs);
+        localStorage.setItem("faqs", JSON.stringify(nextFaqs));
+        alert("FAQ uploaded (DOCX).");
+        return;
+      }
+
+      alert("Unsupported file type. Supported: .json, .txt, .docx");
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error("FAQ upload error:", err);
+      alert("Failed to read uploaded file.");
+    }
+  };
+
+  const onFaqFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0] ?? null;
+    handleFaqFile(f);
+    // reset input so same file can be uploaded again later
+    if (e.target) e.currentTarget.value = "";
+  };
+
+  /** ====== Export helpers ====== **/
   const downloadObjectAsJson = (obj: any, filename = "report.json") => {
     const blob = new Blob([JSON.stringify(obj, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -261,34 +334,7 @@ export function AdminDashboard() {
     }
   };
 
-  const handleFaqFile = async (file?: File | null) => {
-    if (!file) return;
-    try {
-      const txt = await file.text();
-      try {
-        const parsed = JSON.parse(txt);
-        const next = Array.isArray(parsed) ? [...faqs, ...parsed] : [...faqs, parsed];
-        setFaqs(next);
-        localStorage.setItem("faqs", JSON.stringify(next));
-        alert("FAQs uploaded.");
-      } catch {
-        const entry = { id: Date.now(), text: txt };
-        const next = [...faqs, entry];
-        setFaqs(next);
-        localStorage.setItem("faqs", JSON.stringify(next));
-        alert("Text FAQ uploaded.");
-      }
-    } catch {
-      alert("Failed reading file.");
-    }
-  };
-
-  const onFaqFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0];
-    handleFaqFile(f);
-    if (e.target) e.currentTarget.value = "";
-  };
-
+  /** ====== Other actions ====== **/
   const clearMessages = () => {
     if (!confirm("Clear all chat messages? This cannot be undone.")) return;
     setMessages([]);
@@ -298,16 +344,16 @@ export function AdminDashboard() {
 
   const simulateConversation = () => {
     const ts = Date.now();
-    const newMsgs = [
+    const newMsgs: Message[] = [
       { id: `m-${ts}-1`, timestamp: ts - 60000, sender: "user", language: languages[0] || "English", text: "Demo: Hello there" },
       { id: `m-${ts}-2`, timestamp: ts - 58000, sender: "assistant", language: languages[0] || "English", text: "Demo: Hi how can I help?" },
     ];
     const next = [...messages, ...newMsgs];
     setMessages(next);
+    localStorage.setItem("chatMessages", JSON.stringify(next));
     alert("Demo conversation added.");
   };
 
-  // add language (prompt)
   const addLanguage = () => {
     const name = prompt("Enter new language:");
     if (!name) return;
@@ -318,7 +364,7 @@ export function AdminDashboard() {
     alert("Language added.");
   };
 
-  // ---------------- UI ----------------
+  /** ====== UI (kept same) ====== **/
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-[#F5F6FA] p-8">
       <div className="max-w-7xl mx-auto">
@@ -408,7 +454,7 @@ export function AdminDashboard() {
                 <h3 className="text-gray-900 mb-1">Upload FAQs</h3>
                 <p className="text-gray-600">Add knowledge base content</p>
                 <div className="mt-3">
-                  <input ref={fileRef} type="file" accept=".json,.txt" onChange={onFaqFileChange} className="hidden" />
+                  <input ref={fileRef} type="file" accept=".json,.txt,.docx" onChange={onFaqFileChange} className="hidden" />
                   <Button size="sm" onClick={() => fileRef.current?.click()}>Upload</Button>
                 </div>
               </div>
@@ -513,7 +559,7 @@ export function AdminDashboard() {
         </Card>
       </div>
 
-      {/* ---------------- Reports Modal (in-page popup) ---------------- */}
+      {/* Reports modal */}
       {reportsOpen && (
         <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-6">
           <div className="bg-white w-full max-w-6xl rounded-xl shadow-xl overflow-hidden">
@@ -606,7 +652,7 @@ export function AdminDashboard() {
                 <div className="mb-2 flex items-center justify-between">
                   <div className="text-sm text-gray-600">Showing {modalFilteredMessages.length} messages — page {reportPage} / {pageCount}</div>
                   <div className="flex items-center gap-2">
-                    <select value={rowsPerPage} onChange={() => { /* rowsPerPage is const for now */ }} className="hidden" />
+                    <select value={rowsPerPage} onChange={() => { /* rowsPerPage const */ }} className="hidden" />
                   </div>
                 </div>
 
@@ -626,7 +672,7 @@ export function AdminDashboard() {
                           <td colSpan={4} className="px-3 py-6 text-center text-sm text-gray-500">No messages found</td>
                         </tr>
                       )}
-                      {pagedMessages.map((m: any) => (
+                      {pagedMessages.map((m: Message) => (
                         <tr key={m.id || `${m.timestamp}-${Math.random()}`} className="border-t">
                           <td className="px-3 py-3 text-sm text-gray-700">{new Date(m.timestamp || 0).toLocaleString()}</td>
                           <td className="px-3 py-3 text-sm text-gray-700">{m.sender}</td>
@@ -662,7 +708,6 @@ export function AdminDashboard() {
           </div>
         </div>
       )}
-
     </div>
   );
 }

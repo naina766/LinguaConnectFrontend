@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Search,
   ChevronRight,
@@ -8,6 +8,7 @@ import {
   Wrench,
   HelpCircle,
 } from "lucide-react";
+
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
 import {
@@ -18,7 +19,7 @@ import {
 } from "./ui/dropdown-menu";
 
 import { AuthModal } from "./AuthModal";
-import { ChatInterface } from "./ChatInterface"; // <-- changed to named import
+import { ChatInterface } from "./ChatInterface";
 
 interface Article {
   id: string;
@@ -27,44 +28,28 @@ interface Article {
   category: string;
 }
 
+// DEFAULT categories
+const categoriesList = [
+  { id: "account", name: "Account", icon: HelpCircle },
+  { id: "billing", name: "Billing", icon: CreditCard },
+  { id: "troubleshooting", name: "Troubleshooting", icon: Wrench },
+  { id: "general", name: "General", icon: BookOpen },
+];
+
 export function KnowledgeBase() {
   const [selectedCategory, setSelectedCategory] = useState("account");
   const [selectedLanguage, setSelectedLanguage] = useState("en");
   const [searchQuery, setSearchQuery] = useState("");
+
+  const [dynamicFaq, setDynamicFaq] = useState<Article[]>([]);
 
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showChat, setShowChat] = useState(false);
 
   const isAuth = localStorage.getItem("isAuthenticated") === "true";
 
-  function handleStartChat() {
-    if (!isAuth) {
-      setShowAuthModal(true);
-    } else {
-      setShowChat(true);
-    }
-  }
-
-  function handleAuthSuccess() {
-    localStorage.setItem("isAuthenticated", "true");
-    setShowAuthModal(false);
-    setShowChat(true);
-  }
-
-  const languages = [
-    { code: "en", name: "English", flag: "🇬🇧" },
-    { code: "es", name: "Spanish", flag: "🇪🇸" },
-    { code: "hi", name: "Hindi", flag: "🇮🇳" },
-    { code: "fr", name: "French", flag: "🇫🇷" },
-  ];
-
-  const categories = [
-    { id: "account", name: "Account", icon: HelpCircle },
-    { id: "billing", name: "Billing", icon: CreditCard },
-    { id: "troubleshooting", name: "Troubleshooting", icon: Wrench },
-  ];
-
-  const articles: Article[] = [
+  // STATIC 9 ARTICLES (from your older version)
+  const staticArticles: Article[] = [
     {
       id: "1",
       title: "How do I create an account?",
@@ -129,19 +114,72 @@ export function KnowledgeBase() {
     },
   ];
 
-  const filteredArticles = articles.filter((article) => {
-    const matchesCategory = article.category === selectedCategory;
-    const matchesSearch = searchQuery
+  // 🔥 LOAD DYNAMIC FAQ FROM LOCAL STORAGE
+  useEffect(() => {
+    const raw = localStorage.getItem("faqs");
+    if (!raw) {
+      setDynamicFaq([]);
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(raw);
+
+      // Convert uploaded FAQ formats → Articles
+      const normalised: Article[] = parsed.map((item: any) => ({
+        id: String(item.id || Date.now() + Math.random()),
+        title: item.title || "FAQ",
+        content: item.text || item.content || "",
+        category:
+          item.category && categoriesList.some((c) => c.id === item.category)
+            ? item.category
+            : "general",
+      }));
+
+      setDynamicFaq(normalised);
+    } catch {
+      setDynamicFaq([]);
+    }
+  }, []);
+
+  // 🔥 Merge static + dynamic
+  const allArticles: Article[] = [...staticArticles, ...dynamicFaq];
+
+  // Filter by selected category + search
+  const filteredArticles = allArticles.filter((article) => {
+    const matchCategory = article.category === selectedCategory;
+    const matchSearch = searchQuery
       ? article.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         article.content.toLowerCase().includes(searchQuery.toLowerCase())
       : true;
-    return matchesCategory && matchesSearch;
+
+    return matchCategory && matchSearch;
   });
 
+  const languages = [
+    { code: "en", name: "English", flag: "🇬🇧" },
+    { code: "es", name: "Spanish", flag: "🇪🇸" },
+    { code: "hi", name: "Hindi", flag: "🇮🇳" },
+    { code: "fr", name: "French", flag: "🇫🇷" },
+  ];
+
   const currentLanguage =
-    languages.find((lang) => lang.code === selectedLanguage) || languages[0];
+    languages.find((l) => l.code === selectedLanguage) || languages[0];
   const currentCategory =
-    categories.find((cat) => cat.id === selectedCategory) || categories[0];
+    categoriesList.find((c) => c.id === selectedCategory) ||
+    categoriesList[0];
+
+  // Chat controls
+  function handleStartChat() {
+    if (!isAuth) setShowAuthModal(true);
+    else setShowChat(true);
+  }
+
+  function handleAuthSuccess() {
+    localStorage.setItem("isAuthenticated", "true");
+    setShowAuthModal(false);
+    setShowChat(true);
+  }
 
   return (
     <div className="min-h-[calc(100vh-4rem)]">
@@ -179,6 +217,7 @@ export function KnowledgeBase() {
               </p>
             </div>
 
+            {/* Language Switcher */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -190,6 +229,7 @@ export function KnowledgeBase() {
                   <span className="ml-1">{currentLanguage.name}</span>
                 </Button>
               </DropdownMenuTrigger>
+
               <DropdownMenuContent align="end" className="w-48">
                 {languages.map((lang) => (
                   <DropdownMenuItem
@@ -208,12 +248,10 @@ export function KnowledgeBase() {
             </DropdownMenu>
           </div>
 
-          {/* Search Bar */}
+          {/* Search */}
           <div className="relative max-w-2xl">
-            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
             <Input
-              id="chatInput"
-              name="chatInput"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search for answers..."
@@ -228,23 +266,24 @@ export function KnowledgeBase() {
         <div className="flex gap-8">
           {/* Sidebar */}
           <div className="w-64 flex-shrink-0">
-            <div className="bg-white rounded-xl border border-gray-200 p-4 sticky top-20">
+            <div className="bg-white rounded-xl border p-4 sticky top-20">
               <h3 className="text-gray-900 mb-4">Categories</h3>
+
               <nav className="space-y-1">
-                {categories.map((category) => {
-                  const Icon = category.icon;
+                {categoriesList.map((cat) => {
+                  const Icon = cat.icon;
                   return (
                     <button
-                      key={category.id}
-                      onClick={() => setSelectedCategory(category.id)}
+                      key={cat.id}
+                      onClick={() => setSelectedCategory(cat.id)}
                       className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                        selectedCategory === category.id
+                        selectedCategory === cat.id
                           ? "bg-blue-50 text-[#007BFF]"
                           : "text-gray-600 hover:bg-gray-50"
                       }`}
                     >
                       <Icon className="w-5 h-5" />
-                      <span>{category.name}</span>
+                      <span>{cat.name}</span>
                       <ChevronRight className="w-4 h-4 ml-auto" />
                     </button>
                   );
@@ -252,16 +291,16 @@ export function KnowledgeBase() {
               </nav>
 
               {/* Chat Button */}
-              <div className="mt-6 pt-6 border-t border-gray-200">
-                <div className="bg-gradient-to-br from-blue-50 to-white rounded-lg p-4 border border-gray-100">
+              <div className="mt-6 pt-6 border-t">
+                <div className="bg-gradient-to-br from-blue-50 to-white p-4 rounded-lg border">
                   <BookOpen className="w-8 h-8 text-[#007BFF] mb-2" />
                   <p className="text-gray-900 mb-1">Need more help?</p>
                   <p className="text-gray-600 mb-3">
-                    Chat with our AI support assistant
+                    Chat with our AI assistant
                   </p>
 
                   <Button
-                    className="w-full bg-[#007BFF] hover:bg-[#0056b3] text-white"
+                    className="w-full bg-[#007BFF] hover:bg-[#0056b3]"
                     onClick={handleStartChat}
                   >
                     Start Chat
@@ -288,50 +327,29 @@ export function KnowledgeBase() {
             </div>
 
             <div className="space-y-4">
-              {filteredArticles.map((article) => (
+              {filteredArticles.map((a) => (
                 <div
-                  key={article.id}
-                  className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-md transition-shadow"
+                  key={a.id}
+                  className="bg-white rounded-xl border p-6 hover:shadow-md transition-shadow"
                 >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1">
-                      <h3 className="text-gray-900 mb-2">{article.title}</h3>
-                      <p className="text-gray-600 mb-4">{article.content}</p>
+                  <h3 className="text-gray-900 mb-2">{a.title}</h3>
+                  <p className="text-gray-600 mb-4">{a.content}</p>
 
-                      <div className="inline-flex items-center gap-1 bg-blue-50 px-3 py-1 rounded-full">
-                        <span className="text-[#007BFF]">
-                          Translated to {currentLanguage.name}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="flex gap-1">
-                      {languages.map((lang) => (
-                        <button
-                          key={lang.code}
-                          onClick={() => setSelectedLanguage(lang.code)}
-                          className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${
-                            selectedLanguage === lang.code
-                              ? "bg-blue-50 ring-2 ring-[#007BFF]"
-                              : "hover:bg-gray-50"
-                          }`}
-                          title={lang.name}
-                        >
-                          <span>{lang.flag}</span>
-                        </button>
-                      ))}
-                    </div>
+                  <div className="inline-flex items-center gap-1 bg-blue-50 px-3 py-1 rounded-full">
+                    <span className="text-[#007BFF]">
+                      Translated to {currentLanguage.name}
+                    </span>
                   </div>
                 </div>
               ))}
             </div>
 
             {filteredArticles.length === 0 && (
-              <div className="text-center py-12">
+              <div className="text-center py-16">
                 <BookOpen className="w-16 h-16 text-gray-300 mx-auto mb-4" />
                 <h3 className="text-gray-900 mb-2">No articles found</h3>
                 <p className="text-gray-600">
-                  Try adjusting your search or browse different categories
+                  Try adjusting your search or category
                 </p>
               </div>
             )}
