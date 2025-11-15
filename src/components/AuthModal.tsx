@@ -35,7 +35,7 @@ export function AuthModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // RESET ON OPEN/CLOSE
+  // RESET FORM WHEN MODAL OPENS/CLOSES
   useEffect(() => {
     setMode(initialMode);
 
@@ -48,14 +48,47 @@ export function AuthModal({
       setOtpSent(false);
       setOtpInput("");
       setError("");
+      setLoading(false);
     }
   }, [isOpen, initialMode]);
 
-  // VALIDATION HELPERS
+  // VALIDATION
   const validEmail = (e: string) => /\S+@\S+\.\S+/.test(e);
   const validPassword = (p: string) => p.length >= 6;
 
-  // SEND OTP (FAKE DELAY)
+  // =======================
+  // 🌟 SAVE USER FUNCTION
+  // =======================
+  const saveUserData = (name: string, email: string, method: "password" | "otp") => {
+    const timestamp = new Date().toISOString();
+
+    const userId = crypto.randomUUID();
+
+    const userData = {
+      id: userId,
+      email,
+      fullName: name,
+      loginAt: timestamp,
+      method,
+    };
+
+    // Save current user session
+    localStorage.setItem("username", name);
+    localStorage.setItem("userEmail", email);
+    localStorage.setItem("userId", userId);
+    localStorage.setItem("authMethod", method);
+    localStorage.setItem("isAuthenticated", "true");
+    localStorage.setItem("lastLogin", timestamp);
+
+    // Add to users database
+    const existingUsers = JSON.parse(localStorage.getItem("users") || "[]");
+    const updatedUsers = [...existingUsers, userData];
+    localStorage.setItem("users", JSON.stringify(updatedUsers));
+  };
+
+  // =======================
+  // SEND OTP
+  // =======================
   const sendOtp = async (email: string) => {
     setLoading(true);
     setError("");
@@ -69,9 +102,11 @@ export function AuthModal({
     }
   };
 
-  // VERIFY OTP (SIMULATED)
+  // =======================
+  // VERIFY OTP
+  // =======================
   const verifyOtpAndFinishSignup = async () => {
-    if (!otpInput || otpInput.trim().length < 3) {
+    if (!otpInput.trim()) {
       setError("Enter the OTP sent to your email.");
       return;
     }
@@ -82,14 +117,12 @@ export function AuthModal({
     try {
       await new Promise((r) => setTimeout(r, 700));
 
-      const nameToSave =
-        signupFullName.trim() || signupEmail.split("@")[0];
+      const name = signupFullName.trim() || signupEmail.split("@")[0];
 
-      // SAVE USER
-      localStorage.setItem("username", nameToSave);
-      localStorage.setItem("isAuthenticated", "true");
+      // Save user with OTP method
+      saveUserData(name, signupEmail, "otp");
 
-      onSuccess?.(nameToSave);
+      onSuccess?.(name);
       onClose();
     } catch {
       setError("OTP verification failed.");
@@ -98,7 +131,9 @@ export function AuthModal({
     }
   };
 
-  // LOGIN HANDLER
+  // =======================
+  // LOGIN
+  // =======================
   const handleLogin = async () => {
     setError("");
 
@@ -116,14 +151,14 @@ export function AuthModal({
     try {
       await new Promise((r) => setTimeout(r, 800));
 
+      const nameFromEmail = loginEmail.split("@")[0];
       const existingName = localStorage.getItem("username");
-      const nameToSave =
-        existingName || loginEmail.split("@")[0];
+      const finalName = existingName || nameFromEmail;
 
-      localStorage.setItem("username", nameToSave);
-      localStorage.setItem("isAuthenticated", "true");
+      // save login info
+      saveUserData(finalName, loginEmail, "password");
 
-      onSuccess?.(nameToSave);
+      onSuccess?.(finalName);
       onClose();
     } catch {
       setError("Login failed. Check credentials.");
@@ -132,7 +167,9 @@ export function AuthModal({
     }
   };
 
-  // SIGNUP START (SEND OTP)
+  // =======================
+  // SIGNUP START → OTP
+  // =======================
   const handleSignupStart = async () => {
     setError("");
 
@@ -157,14 +194,14 @@ export function AuthModal({
       {isOpen && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center">
           <div className="bg-white rounded-xl w-full max-w-md p-6 shadow-xl relative">
-            {/* CLOSE BUTTON */}
+
+            {/* CLOSE */}
             <button
               className="absolute top-3 right-3 text-gray-500 hover:text-gray-700"
               onClick={() => {
                 setOtpSent(false);
                 onClose();
               }}
-              aria-label="Close"
             >
               <X />
             </button>
@@ -172,9 +209,7 @@ export function AuthModal({
             {/* HEADER */}
             <div className="mb-4">
               <h2 className="text-lg font-semibold">
-                {mode === "login"
-                  ? "Login to LinguaConnect"
-                  : "Create an account"}
+                {mode === "login" ? "Login to LinguaConnect" : "Create an account"}
               </h2>
               <p className="text-sm text-gray-500">
                 {mode === "login"
@@ -198,16 +233,10 @@ export function AuthModal({
                   onChange={(e) => setLoginPassword(e.target.value)}
                 />
 
-                {error && (
-                  <div className="text-sm text-red-600">{error}</div>
-                )}
+                {error && <div className="text-sm text-red-600">{error}</div>}
 
                 <div className="flex gap-3 mt-4">
-                  <Button
-                    className="flex-1"
-                    onClick={handleLogin}
-                    disabled={loading}
-                  >
+                  <Button className="flex-1" onClick={handleLogin} disabled={loading}>
                     {loading ? "Logging in..." : "Login"}
                   </Button>
 
@@ -228,9 +257,7 @@ export function AuthModal({
                     <Input
                       placeholder="Full Name"
                       value={signupFullName}
-                      onChange={(e) =>
-                        setSignupFullName(e.target.value)
-                      }
+                      onChange={(e) => setSignupFullName(e.target.value)}
                     />
                     <Input
                       placeholder="Email"
@@ -241,21 +268,13 @@ export function AuthModal({
                       placeholder="Password"
                       type="password"
                       value={signupPassword}
-                      onChange={(e) =>
-                        setSignupPassword(e.target.value)
-                      }
+                      onChange={(e) => setSignupPassword(e.target.value)}
                     />
 
-                    {error && (
-                      <div className="text-sm text-red-600">{error}</div>
-                    )}
+                    {error && <div className="text-sm text-red-600">{error}</div>}
 
                     <div className="flex gap-3 mt-4">
-                      <Button
-                        className="flex-1"
-                        onClick={handleSignupStart}
-                        disabled={loading}
-                      >
+                      <Button className="flex-1" onClick={handleSignupStart} disabled={loading}>
                         {loading ? "Sending OTP..." : "Send OTP"}
                       </Button>
 
@@ -273,9 +292,7 @@ export function AuthModal({
                     {/* OTP STEP */}
                     <div className="text-sm text-gray-700">
                       OTP sent to{" "}
-                      <span className="font-medium">
-                        {signupEmail}
-                      </span>
+                      <span className="font-medium">{signupEmail}</span>
                     </div>
 
                     <Input
@@ -284,9 +301,7 @@ export function AuthModal({
                       onChange={(e) => setOtpInput(e.target.value)}
                     />
 
-                    {error && (
-                      <div className="text-sm text-red-600">{error}</div>
-                    )}
+                    {error && <div className="text-sm text-red-600">{error}</div>}
 
                     <div className="flex gap-3 mt-4">
                       <Button

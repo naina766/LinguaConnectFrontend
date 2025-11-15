@@ -160,7 +160,7 @@ export function LandingPage({ onNavigate }: LandingPageProps) {
 
   return (
     <>
-      <div className="min-h-screen bg-gradient-to-br from-[#007BFF] via-[#0056b3] to-[#00B5AD] overflow-x-hidden">
+      <div className="min-h-screen bg-gradient-to-br from-[#007BFF] via-[#0056b3] to-[#00B5AD] ">
         
         {/* ---------------- NAVBAR ---------------- */}
         <nav className="absolute top-0 left-0 right-0 z-50">

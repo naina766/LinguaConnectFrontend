@@ -26,7 +26,7 @@ import {
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
 
-// ------------------- LANGUAGES (full 100+ list per your choice B) -------------------
+// ------------------- LANGUAGES (full list) -------------------
 const languages = [
   { code: "ace_Arab", name: "Acehnese (Arabic script)" },
   { code: "ace_Latn", name: "Acehnese (Latin script)" },
@@ -248,23 +248,25 @@ function writeStoredMessages(msgs: Message[]) {
 
 // ---------------------- MAIN COMPONENT ----------------------
 export function ChatInterface() {
-  // DEMO MODE + AUTH MODE
+  // AUTH + DEMO
   const [demoMode, setDemoMode] = useState(() => localStorage.getItem("demoMode") === "true");
   const [demoCount, setDemoCount] = useState(() => Number(localStorage.getItem("demoCount") || 0));
-  const [isAuthenticated, setIsAuthenticated] = useState(() => localStorage.getItem("isAuthenticated") === "true");
+  const [isAuthenticated, setIsAuthenticated] = useState(
+    () => localStorage.getItem("isAuthenticated") === "true"
+  );
 
   // Popups
   const [demoLimitPopup, setDemoLimitPopup] = useState(false);
   const [exportPopup, setExportPopup] = useState(false);
   const [sharePopup, setSharePopup] = useState(false);
 
-  // Main chat state
-  const [selectedLanguage, setSelectedLanguage] = useState("eng_Latn"); // default to english code in long list
+  // Chat state
+  const [selectedLanguage, setSelectedLanguage] = useState("eng_Latn");
   const [inputMessage, setInputMessage] = useState("");
   const [messages, setMessages] = useState<Message[]>(() => readStoredMessages());
   const [aiTyping, setAiTyping] = useState(false);
 
-  // UI state
+  // UI control
   const [listening, setListening] = useState(false);
   const [languageSearch, setLanguageSearch] = useState("");
   const [shareLink, setShareLink] = useState("");
@@ -276,21 +278,21 @@ export function ChatInterface() {
   const recognitionRef = useRef<any>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Persist basic flags to storage
+  // localStorage persistence
   useEffect(() => localStorage.setItem("demoMode", demoMode ? "true" : "false"), [demoMode]);
   useEffect(() => localStorage.setItem("demoCount", String(demoCount)), [demoCount]);
   useEffect(() => localStorage.setItem("isAuthenticated", isAuthenticated ? "true" : "false"), [isAuthenticated]);
 
-  // Write messages to storage whenever they change
+  // Write messages to localStorage
   useEffect(() => {
     writeStoredMessages(messages);
     try {
-      const totalUserMsgs = messages.filter((m) => m.sender === "user").length;
-      localStorage.setItem("totalConversations", String(totalUserMsgs));
+      const count = messages.filter((m) => m.sender === "user").length;
+      localStorage.setItem("totalConversations", String(count));
     } catch {}
   }, [messages]);
 
-  // Cross-tab sync
+  // Sync cross-tabs
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
       if (e.key === "chatMessages" || e.key === "chatUpdatedAt") {
@@ -304,22 +306,19 @@ export function ChatInterface() {
     return () => window.removeEventListener("storage", onStorage);
   }, []);
 
-  // Sticker click-outside close
+  // Sticker click-outside closing
   useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
+    const handler = (e: MouseEvent) => {
       if (stickerRef.current && !stickerRef.current.contains(e.target as Node)) {
         setShowStickers(false);
       }
     };
-
-    if (showStickers) document.addEventListener("mousedown", handleClickOutside);
-    else document.removeEventListener("mousedown", handleClickOutside);
-
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    if (showStickers) document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
   }, [showStickers]);
 
   // -----------------------------
-  // INIT VOICE RECOGNITION
+  // Initialize voice recognition
   // -----------------------------
   useEffect(() => {
     if (typeof window !== "undefined" && "webkitSpeechRecognition" in window) {
@@ -332,51 +331,43 @@ export function ChatInterface() {
     }
   }, []);
 
-  // Simple mapping from language code -> speech recognition locale
   function guessSpeechLocale(code: string) {
     const c = code.toLowerCase();
-    if (c.includes("hin") || c.includes("hindi") || c.includes("_hi") || c.includes("hin_deva")) return "hi-IN";
-    if (c.includes("fra") || c.includes("french")) return "fr-FR";
-    if (c.includes("spa") || c.includes("es") || c.includes("spanish")) return "es-ES";
-    if (c.includes("deu") || c.includes("german")) return "de-DE";
-    if (c.includes("ita") || c.includes("ital")) return "it-IT";
-    if (c.includes("jpn") || c.includes("japanese")) return "ja-JP";
-    if (c.includes("kor") || c.includes("korean")) return "ko-KR";
-    if (c.includes("zho") || c.includes("chi") || c.includes("chinese")) return "zh-CN";
-    if (c.includes("urd") || c.includes("urdu")) return "ur-PK";
-    if (c.includes("ara") || c.includes("arab")) return "ar-SA";
-    // fallback
+    if (c.includes("hin")) return "hi-IN";
+    if (c.includes("fra")) return "fr-FR";
+    if (c.includes("spa")) return "es-ES";
+    if (c.includes("deu")) return "de-DE";
+    if (c.includes("ita")) return "it-IT";
+    if (c.includes("jpn")) return "ja-JP";
+    if (c.includes("kor")) return "ko-KR";
+    if (c.includes("zho")) return "zh-CN";
+    if (c.includes("urd")) return "ur-PK";
+    if (c.includes("ara")) return "ar-SA";
     return "en-US";
   }
 
   const startVoice = () => {
     const rec = recognitionRef.current;
     if (!rec) {
-      alert("Speech recognition not supported in your browser");
+      alert("Speech recognition not supported in this browser");
       return;
     }
-
     try {
-      const locale = guessSpeechLocale(selectedLanguage);
-      rec.lang = locale;
+      rec.lang = guessSpeechLocale(selectedLanguage);
       rec.start();
       setListening(true);
-    } catch (err) {
-      console.log("Mic already active or failed to start", err);
-    }
+    } catch {}
 
     rec.onresult = (e: any) => {
-      let text = "";
-      for (let i = 0; i < e.results.length; i++) text += e.results[i][0].transcript;
-      setInputMessage(text);
+      let txt = "";
+      for (let i = 0; i < e.results.length; i++) txt += e.results[i][0].transcript;
+      setInputMessage(txt);
     };
-
     rec.onend = () => setListening(false);
-    rec.onerror = () => setListening(false);
   };
 
   // -----------------------------
-  // FILE UPLOAD
+  // File Upload
   // -----------------------------
   const handleFileUpload = (e: any) => {
     const file = e.target.files?.[0];
@@ -390,15 +381,16 @@ export function ChatInterface() {
       language: selectedLanguage,
     };
 
-    setMessages((m) => {
-      const next = [...m, msg];
+    setMessages((prev) => {
+      const next = [...prev, msg];
       writeStoredMessages(next);
       return next;
     });
   };
 
+
   // -----------------------------
-  // SEND MESSAGE (with demo limit support)
+  // SEND MESSAGE
   // -----------------------------
   const sendMsg = () => {
     if (!inputMessage.trim()) return;
@@ -408,7 +400,7 @@ export function ChatInterface() {
       return;
     }
 
-    const userMsg: Message = {
+    const msg: Message = {
       id: Date.now().toString(),
       text: inputMessage,
       sender: "user",
@@ -417,23 +409,23 @@ export function ChatInterface() {
     };
 
     setMessages((prev) => {
-      const next = [...prev, userMsg];
+      const next = [...prev, msg];
       writeStoredMessages(next);
       return next;
     });
 
     if (demoMode) {
-      const nc = demoCount + 1;
-      setDemoCount(nc);
-      localStorage.setItem("demoCount", String(nc));
+      const newCount = demoCount + 1;
+      setDemoCount(newCount);
+      localStorage.setItem("demoCount", String(newCount));
     }
 
     setInputMessage("");
     setAiTyping(true);
 
-    // Fake AI reply (frontend demo)
+    // Fake AI reply
     setTimeout(() => {
-      const aiMsg: Message = {
+      const reply: Message = {
         id: (Date.now() + 1).toString(),
         text: `AI response in ${selectedLanguage}.`,
         sender: "assistant",
@@ -441,13 +433,14 @@ export function ChatInterface() {
         language: selectedLanguage,
       };
       setMessages((prev) => {
-        const next = [...prev, aiMsg];
+        const next = [...prev, reply];
         writeStoredMessages(next);
         return next;
       });
       setAiTyping(false);
     }, 900);
   };
+
 
   // -----------------------------
   // EXPORT / DOWNLOAD
@@ -469,7 +462,9 @@ export function ChatInterface() {
     URL.revokeObjectURL(url);
   };
 
-  const downloadTXT = () => triggerDownload(new Blob([generateChatText()], { type: "text/plain" }), "chat.txt");
+  const downloadTXT = () =>
+    triggerDownload(new Blob([generateChatText()], { type: "text/plain" }), "chat.txt");
+
   const downloadWORD = () =>
     triggerDownload(
       new Blob([generateChatText()], {
@@ -477,7 +472,10 @@ export function ChatInterface() {
       }),
       "chat.docx"
     );
-  const downloadPDF = () => triggerDownload(new Blob([generateChatText()], { type: "application/pdf" }), "chat.pdf");
+
+  const downloadPDF = () =>
+    triggerDownload(new Blob([generateChatText()], { type: "application/pdf" }), "chat.pdf");
+
 
   // -----------------------------
   // SHARE LINK
@@ -494,60 +492,97 @@ export function ChatInterface() {
     } catch {}
   };
 
-  // -----------------------------
-  // LANGUAGE FILTER (for dropdown)
-  // -----------------------------
-  const filteredLanguages = languageSearch.trim().length > 0
-    ? languages.filter((l) => l.name.toLowerCase().includes(languageSearch.toLowerCase()))
-    : languages.slice(0, 40); // show top 40 by default in dropdown for performance
 
-  const currentLang = languages.find((l) => l.code === selectedLanguage) || { code: selectedLanguage, name: selectedLanguage };
+  // -----------------------------
+  // FILTER LANGUAGES
+  // -----------------------------
+  const filteredLanguages =
+    languageSearch.trim().length > 0
+      ? languages.filter((l) => l.name.toLowerCase().includes(languageSearch.toLowerCase()))
+      : languages.slice(0, 40);
+
+  const currentLang =
+    languages.find((l) => l.code === selectedLanguage) || {
+      code: selectedLanguage,
+      name: selectedLanguage,
+    };
+
 
   // -----------------------------
   // UI
   // -----------------------------
   return (
     <div className="h-[calc(100vh-4rem)] flex relative">
-      {/* DEMO LIMIT POPUP */}
+      {/* ---------------- DEMO LIMIT POPUP ---------------- */}
       {demoLimitPopup && (
         <div className="absolute inset-0 bg-black/40 flex items-center justify-center z-[999]">
           <div className="bg-white p-6 rounded-xl w-72 shadow-xl text-center">
-            <h2 className="text-lg font-semibold text-red-600 mb-2">Demo Limit Reached!</h2>
-            <p className="text-gray-700 mb-4">You have used all 10 free messages. Please Login or Signup to continue chatting.</p>
+            <h2 className="text-lg font-semibold text-red-600 mb-2">
+              Demo Limit Reached!
+            </h2>
+            <p className="text-gray-700 mb-4">
+              You have used all 10 free messages. Please Login or Signup to
+              continue chatting.
+            </p>
 
-            <Button className="w-full bg-[#007BFF] text-white" onClick={() => (window.location.href = "/")}>
+            <Button
+              className="w-full bg-[#007BFF] text-white"
+              onClick={() => (window.location.href = "/")}
+            >
               Go to Login / Signup
             </Button>
 
-            <Button className="w-full mt-3" variant="outline" onClick={() => setDemoLimitPopup(false)}>
+            <Button
+              className="w-full mt-3"
+              variant="outline"
+              onClick={() => setDemoLimitPopup(false)}
+            >
               Close
             </Button>
           </div>
         </div>
       )}
 
-      {/* EXPORT POPUP */}
+      {/* ---------------- EXPORT POPUP ---------------- */}
       {exportPopup && (
         <div className="absolute inset-0 bg-black/40 flex items-center justify-center z-50">
           <div className="bg-white w-80 p-6 rounded-xl shadow-xl border">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4 text-center">Export Chat As</h2>
+            <h2 className="text-lg font-semibold text-gray-900 mb-4 text-center">
+              Export Chat As
+            </h2>
 
-            <Button className="w-full mb-3 flex gap-2" onClick={downloadPDF}><FileText className="w-5 h-5" /> PDF</Button>
-            <Button className="w-full mb-3 flex gap-2" onClick={downloadWORD}><File className="w-5 h-5" /> Word (.docx)</Button>
-            <Button className="w-full flex gap-2" onClick={downloadTXT}><FileType className="w-5 h-5" /> Text (.txt)</Button>
+            <Button className="w-full mb-3 flex gap-2" onClick={downloadPDF}>
+              <FileText className="w-5 h-5" /> PDF
+            </Button>
+            <Button className="w-full mb-3 flex gap-2" onClick={downloadWORD}>
+              <File className="w-5 h-5" /> Word (.docx)
+            </Button>
+            <Button className="w-full flex gap-2" onClick={downloadTXT}>
+              <FileType className="w-5 h-5" /> Text (.txt)
+            </Button>
 
-            <Button className="w-full mt-4" variant="outline" onClick={() => setExportPopup(false)}>Close</Button>
+            <Button
+              className="w-full mt-4"
+              variant="outline"
+              onClick={() => setExportPopup(false)}
+            >
+              Close
+            </Button>
           </div>
         </div>
       )}
 
-      {/* SHARE POPUP */}
+      {/* ---------------- SHARE POPUP ---------------- */}
       {sharePopup && (
         <div className="absolute inset-0 bg-black/40 flex items-center justify-center z-50">
           <div className="bg-white w-96 p-6 rounded-xl shadow-xl border">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4 text-center">Share Conversation</h2>
+            <h2 className="text-lg font-semibold text-gray-900 mb-4 text-center">
+              Share Conversation
+            </h2>
 
-            <div className="p-3 bg-gray-50 border rounded text-xs break-all">{shareLink}</div>
+            <div className="p-3 bg-gray-50 border rounded text-xs break-all">
+              {shareLink}
+            </div>
 
             <Button
               className="w-full mt-4 bg-[#007BFF] text-white"
@@ -560,32 +595,47 @@ export function ChatInterface() {
               {copied ? "Copied!" : "Copy Link"}
             </Button>
 
-            <Button variant="outline" className="w-full mt-3" onClick={() => setSharePopup(false)}>Close</Button>
+            <Button
+              variant="outline"
+              className="w-full mt-3"
+              onClick={() => setSharePopup(false)}
+            >
+              Close
+            </Button>
           </div>
         </div>
       )}
 
-      {/* LEFT CHAT AREA */}
+      {/* ---------------- LEFT CHAT AREA ---------------- */}
       <div className="flex-1 flex flex-col bg-white">
         {/* HEADER */}
         <div className="border-b px-6 py-4 flex items-center justify-between bg-white">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-[#007BFF] to-[#00B5AD] text-white rounded-full flex items-center justify-center">AI</div>
+            <div className="w-10 h-10 bg-gradient-to-br from-[#007BFF] to-[#00B5AD] text-white rounded-full flex items-center justify-center">
+              AI
+            </div>
             <div>
               <h3 className="text-gray-900">LinguaConnect Support</h3>
               <div className="text-gray-500 flex items-center gap-2">
-                <div className={`w-2 h-2 rounded-full ${aiTyping ? "bg-green-500 animate-pulse" : "bg-gray-400"}`}></div>
+                <div
+                  className={`w-2 h-2 rounded-full ${
+                    aiTyping ? "bg-green-500 animate-pulse" : "bg-gray-400"
+                  }`}
+                ></div>
                 <span>{aiTyping ? "Typing…" : "Online"}</span>
               </div>
             </div>
           </div>
 
-          {/* Language dropdown (small menu with search) */}
+          {/* LANGUAGE DROPDOWN */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="flex gap-2 items-center px-4 py-2 rounded-lg shadow-sm">
+              <Button
+                variant="outline"
+                className="flex gap-2 items-center px-4 py-2 rounded-lg shadow-sm"
+              >
                 <Globe className="w-4 h-4" />
-                {currentLang?.name || "Select Language"}
+                {currentLang?.name}
               </Button>
             </DropdownMenuTrigger>
 
@@ -623,17 +673,42 @@ export function ChatInterface() {
         {/* MESSAGES */}
         <div className="flex-1 p-6 overflow-y-auto bg-[#F5F6FA]">
           <div className="space-y-4 max-w-3xl mx-auto">
-            {messages.map((m) => (
-              <div key={m.id} className={`flex ${m.sender === "user" ? "justify-end" : "justify-start"}`}>
-                <div className={`px-4 py-3 rounded-2xl max-w-[70%] ${m.sender === "user" ? "bg-[#007BFF] text-white rounded-br-none" : "bg-white text-gray-900 border shadow-sm rounded-bl-none"}`}>
-                  {m.text}
-                </div>
+            {/* If there are no messages, show the agenda prompt */}
+            {messages.length === 0 ? (
+              <div className="h-[60vh] flex flex-col items-center justify-center text-center">
+                <h2 className="text-2xl font-semibold text-gray-900">
+                  What’s on the agenda today?
+                </h2>
+                <p className="text-gray-500 mt-2">
+                  Type a message below to begin the conversation.
+                </p>
               </div>
-            ))}
+            ) : (
+              messages.map((m) => (
+                <div
+                  key={m.id}
+                  className={`flex ${
+                    m.sender === "user" ? "justify-end" : "justify-start"
+                  }`}
+                >
+                  <div
+                    className={`px-4 py-3 rounded-2xl max-w-[70%] ${
+                      m.sender === "user"
+                        ? "bg-[#007BFF] text-white rounded-br-none"
+                        : "bg-white text-gray-900 border shadow-sm rounded-bl-none"
+                    }`}
+                  >
+                    {m.text}
+                  </div>
+                </div>
+              ))
+            )}
 
             {aiTyping && (
               <div className="flex">
-                <div className="px-4 py-3 bg-white rounded-xl shadow border animate-pulse">AI is typing…</div>
+                <div className="px-4 py-3 bg-white rounded-xl shadow border animate-pulse">
+                  AI is typing…
+                </div>
               </div>
             )}
           </div>
@@ -641,13 +716,28 @@ export function ChatInterface() {
 
         {/* INPUT BAR */}
         <div className="border-t px-6 py-4 flex items-center gap-2 relative sticky bottom-0 bg-white z-10">
-          <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileUpload}
+            className="hidden"
+          />
 
-          <Button variant="ghost" size="icon" onClick={() => fileInputRef.current?.click()} disabled={demoMode && demoCount >= 10}>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={demoMode && demoCount >= 10}
+          >
             <Paperclip className="w-5 h-5" />
           </Button>
 
-          <Button variant="ghost" size="icon" onClick={() => setShowStickers(!showStickers)} disabled={demoMode && demoCount >= 10}>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setShowStickers(!showStickers)}
+            disabled={demoMode && demoCount >= 10}
+          >
             <Smile className="w-5 h-5" />
           </Button>
 
@@ -660,11 +750,17 @@ export function ChatInterface() {
 
               <div className="flex items-end gap-[3px] h-5">
                 {[1, 2, 3, 4, 5, 6].map((i) => (
-                  <div key={i} className="w-[3px] bg-red-500 rounded-full animate-[wave_0.8s_ease-in-out_infinite]" style={{ animationDelay: `${i * 0.1}s` }}></div>
+                  <div
+                    key={i}
+                    className="w-[3px] bg-red-500 rounded-full animate-[wave_0.8s_ease-in-out_infinite]"
+                    style={{ animationDelay: `${i * 0.1}s` }}
+                  ></div>
                 ))}
               </div>
 
-              <span className="text-sm text-red-500 font-medium">Listening…</span>
+              <span className="text-sm text-red-500 font-medium">
+                Listening…
+              </span>
             </div>
           )}
 
@@ -673,21 +769,36 @@ export function ChatInterface() {
             value={inputMessage}
             onChange={(e) => setInputMessage(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && sendMsg()}
-            placeholder={demoMode && demoCount >= 10 ? "Demo limit reached — Login to continue" : "Type your message..."}
+            placeholder={
+              demoMode && demoCount >= 10
+                ? "Demo limit reached — Login to continue"
+                : "Type your message..."
+            }
             disabled={demoMode && demoCount >= 10}
           />
 
-          <Button variant="ghost" size="icon" onClick={startVoice} className={listening ? "text-red-500" : ""} disabled={demoMode && demoCount >= 10}>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={startVoice}
+            className={listening ? "text-red-500" : ""}
+            disabled={demoMode && demoCount >= 10}
+          >
             <Mic className="w-5 h-5" />
           </Button>
 
-          <Button size="icon" className="bg-[#007BFF] text-white" onClick={sendMsg} disabled={demoMode && demoCount >= 10}>
+          <Button
+            size="icon"
+            className="bg-[#007BFF] text-white"
+            onClick={sendMsg}
+            disabled={demoMode && demoCount >= 10}
+          >
             <Send className="w-5 h-5" />
           </Button>
         </div>
       </div>
 
-      {/* RIGHT SIDEBAR */}
+      {/* ---------------- RIGHT SIDEBAR ---------------- */}
       <div className="w-80 bg-white border-l p-6">
         <h3 className="text-gray-900 mb-4">Conversation Details</h3>
 
@@ -699,7 +810,9 @@ export function ChatInterface() {
 
           <div className="p-4 bg-blue-50 border rounded-xl">
             <p className="text-gray-600">Status</p>
-            <p className="text-gray-900">{aiTyping ? "AI Responding" : "Active"}</p>
+            <p className="text-gray-900">
+              {aiTyping ? "AI Responding" : "Active"}
+            </p>
           </div>
 
           <div className="p-4 bg-blue-50 border rounded-xl">
@@ -710,8 +823,21 @@ export function ChatInterface() {
           <div className="mt-4 border-t pt-4">
             <h4 className="text-gray-900 mb-3">Quick Actions</h4>
 
-            <Button variant="outline" className="w-full justify-start" onClick={() => setExportPopup(true)}>Export Chat</Button>
-            <Button variant="outline" className="w-full justify-start" onClick={generateShareLink}>Share Conversation</Button>
+            <Button
+              variant="outline"
+              className="w-full justify-start"
+              onClick={() => setExportPopup(true)}
+            >
+              Export Chat
+            </Button>
+
+            <Button
+              variant="outline"
+              className="w-full justify-start"
+              onClick={generateShareLink}
+            >
+              Share Conversation
+            </Button>
 
             <Button
               variant="outline"
@@ -732,3 +858,6 @@ export function ChatInterface() {
     </div>
   );
 }
+
+// 🔥 FIX FOR YOUR ERROR — add DEFAULT EXPORT
+export default ChatInterface;
