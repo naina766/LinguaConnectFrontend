@@ -996,13 +996,14 @@ import api from "../api/axiosInstance.ts";
 // ---------- constants ----------
 const timeRanges = ["24h", "7d", "30d", "90d"] as const;
 const ROWS_PER_PAGE = 12;
+const FAQ_STORAGE_KEY = "faqs";
 
 // ---------- types ----------
 interface Stats {
-  totalConversations: { value: number; change: number };
-  activeUsers: { value: number; change: number };
-  topLanguagesUsed: { value: number; change: number };
-  avgResponseTime: { value: number; change: number };
+  totalConversations: { value: number; change: number } | any;
+  activeUsers: { value: number; change: number } | any;
+  topLanguagesUsed: { value: number; change: number } | any;
+  avgResponseTime: { value: number; change: number } | any;
   conversationsByLanguage: { language: string; count: number; fill?: string }[];
   languageDistribution: { name: string; value: number; color: string }[];
   weeklyStats: { day: string; conversations: number; translations: number }[];
@@ -1060,6 +1061,30 @@ export function AdminDashboard() {
     { id: "troubleshooting", name: "Troubleshooting" },
   ];
 
+  // ------------------- LocalStorage helpers -------------------
+  const readLocalFaqs = (): FaqItem[] => {
+    try {
+      const raw = localStorage.getItem(FAQ_STORAGE_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (err) {
+      console.warn("Failed to read faqs from localStorage", err);
+      return [];
+    }
+  };
+
+  const writeLocalFaqs = (items: FaqItem[]) => {
+    try {
+      localStorage.setItem(FAQ_STORAGE_KEY, JSON.stringify(items));
+      // notify other tabs/components that faqs updated
+      window.dispatchEvent(new Event("faqsUpdated"));
+    } catch (err) {
+      console.warn("Failed to write faqs to localStorage", err);
+    }
+  };
+
+  // ------------------- Fetching / syncing -------------------
   const fetchStats = async () => {
     setLoading(true);
     try {
@@ -1070,6 +1095,7 @@ export function AdminDashboard() {
       if (d?.activeUsers?.value != null) setUserCount(d.activeUsers.value);
     } catch (err) {
       console.error("Error fetching stats:", err);
+      // If backend stats fail it's okay — keep previous state or leave null
     } finally {
       setLoading(false);
     }
@@ -1082,6 +1108,7 @@ export function AdminDashboard() {
       setLanguages(langs.map((l: any) => l.code));
     } catch (err) {
       console.error("Error fetching languages:", err);
+      // fallback: if languages are empty, keep as-is
     }
   };
 
@@ -1091,22 +1118,30 @@ export function AdminDashboard() {
       const res = await axios.get("http://localhost:4001/api/faqs");
       const data = res.data?.data || [];
 
-      setFaqs(data);
+      // normalize to simple objects we store locally (backend may return different fields)
+      const normalized: FaqItem[] = (Array.isArray(data) ? data : []).map(
+        (it: any, i: number) => ({
+          id: it.id ?? it._id ?? `backend-${i}-${Date.now()}`,
+          title: it.title ?? it.question ?? it.q ?? "",
+          content: it.content ?? it.answer ?? it.text ?? "",
+          category: it.category ?? "general",
+        })
+      );
+
+      setFaqs(normalized);
 
       // Save normalized to localStorage so KnowledgeBase can read it
       try {
-        localStorage.setItem("faqs", JSON.stringify(data));
+        writeLocalFaqs(normalized);
       } catch (e) {
-        console.warn("Could not write faqs to localStorage", e);
+        console.warn("Could not write normalized faqs to localStorage", e);
       }
     } catch (err) {
-      console.error("Error fetching faqs:", err);
+      console.error("Error fetching faqs from backend:", err);
 
-      // fallback: try read from localStorage
-      try {
-        const raw = localStorage.getItem("faqs");
-        if (raw) setFaqs(JSON.parse(raw));
-      } catch {}
+      // fallback: read from localStorage
+      const local = readLocalFaqs();
+      setFaqs(local);
     }
   };
 
@@ -1117,6 +1152,20 @@ export function AdminDashboard() {
   useEffect(() => {
     fetchLanguages();
     fetchFaqs();
+
+    // Listen for cross-tab/local updates
+    const onLocalUpdate = () => {
+      const local = readLocalFaqs();
+      setFaqs(local);
+    };
+    window.addEventListener("storage", onLocalUpdate);
+    window.addEventListener("faqsUpdated", onLocalUpdate);
+
+    return () => {
+      window.removeEventListener("storage", onLocalUpdate);
+      window.removeEventListener("faqsUpdated", onLocalUpdate);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const filteredMessages = useMemo(() => {
@@ -1185,6 +1234,7 @@ export function AdminDashboard() {
     }
   };
 
+  // When uploading, try backend; if backend fails, merge into localStorage
   const handleUploadFAQs = async () => {
     if (!faqFile) return;
 
@@ -1193,38 +1243,51 @@ export function AdminDashboard() {
       try {
         const faqsJson = JSON.parse(reader.result as string);
 
-        // If you have an admin upload endpoint, keep using it. Otherwise fallback to posting each FAQ.
+        // attempt backend upload
+        let uploaded = false;
         try {
-          const res = await api.post("/api/admin/upload-faqs", {
+          // try admin-specific endpoint first
+          await api.post("/api/admin/upload-faqs", {
             faqs: faqsJson,
           });
-
-          alert(res.data?.message || "Uploaded FAQs");
+          uploaded = true;
+          alert("Uploaded FAQs to backend");
         } catch (err) {
-          // fallback: try to post to /api/faqs in bulk or individually
+          // try bulk endpoint
           try {
             await axios.post("http://localhost:4001/api/faqs/bulk", {
               faqs: faqsJson,
             });
-          } catch {
-            // try individual posts
-            for (const item of faqsJson) {
-              const payload = {
-                title: item.title || item.question || item.q || "FAQ",
-                content: item.content || item.answer || item.text || "",
-                category: item.category || "general",
-              };
-              try {
-                await axios.post("http://localhost:4001/api/faqs", payload);
-              } catch (e) {
-                console.warn("Failed to post individual faq", e);
-              }
-            }
+            uploaded = true;
+            alert("Uploaded FAQs to backend (bulk)");
+          } catch (err2) {
+            console.warn("Backend upload failed, will fallback to localStorage", err2);
           }
-          alert("Uploaded FAQs (fallback)");
         }
 
-        fetchFaqs();
+        // If backend didn't accept, save into localStorage
+        if (!uploaded) {
+          // Normalize incoming JSON to our local format
+          const normalizedIncoming: FaqItem[] = (Array.isArray(faqsJson) ? faqsJson : []).map(
+            (it: any, i: number) => ({
+              id: it.id ?? it._id ?? `local-upload-${Date.now()}-${i}`,
+              title: it.title ?? it.question ?? it.q ?? "",
+              content: it.content ?? it.answer ?? it.text ?? "",
+              category: it.category ?? "general",
+            })
+          );
+
+          // Merge with existing local faqs
+          const existing = readLocalFaqs();
+          const merged = [...existing, ...normalizedIncoming];
+          writeLocalFaqs(merged);
+          setFaqs(merged);
+          alert("Saved FAQs to localStorage (backend unavailable)");
+        } else {
+          // successful upload: refresh from backend (and localStorage will be set there)
+          await fetchFaqs();
+        }
+
         setFaqFile(null);
       } catch (err) {
         console.error(err);
@@ -1312,7 +1375,7 @@ export function AdminDashboard() {
     languageCounts[m.language] = (languageCounts[m.language] || 0) + 1;
   });
 
-  // ---------------------- FIXED FUNCTION (Missing One) ----------------------
+  // ---------------------- Download helper ----------------------
   const downloadObjectAsJson = (data: any, filename = "admin-data.json") => {
     const blob = new Blob([JSON.stringify(data, null, 2)], {
       type: "application/json",
@@ -1335,7 +1398,11 @@ export function AdminDashboard() {
       const res = await axios.post("http://localhost:4001/api/chatbot/reply", {
         question,
       });
-      const reply = res.data?.reply || res.data?.data?.reply || res.data?.data?.botReplyOriginal || "";
+      const reply =
+        res.data?.reply ||
+        res.data?.data?.reply ||
+        res.data?.data?.botReplyOriginal ||
+        "";
       setNewFaqAnswer(String(reply));
     } catch (err) {
       console.error("Failed to generate answer", err);
@@ -1345,6 +1412,7 @@ export function AdminDashboard() {
     }
   };
 
+  // Save new FAQ: try backend; fallback to localStorage
   const saveNewFaq = async () => {
     const title = (newFaqQuestion || "").trim();
     const content = (newFaqAnswer || "").trim();
@@ -1352,23 +1420,54 @@ export function AdminDashboard() {
     if (!title) return alert("Question cannot be empty");
     if (!content) return alert("Answer cannot be empty (generate or type it)");
 
+    const payload = { title, content, category };
+
     try {
-      const payload = { title, content, category };
+      // try to save to backend
       await axios.post("http://localhost:4001/api/faqs", payload);
 
-      // update local UI + localStorage + fetch from server
+      // refresh from backend and localStorage
       await fetchFaqs();
 
-      // show success and reset modal
+      // reset modal
       setNewFaqQuestion("");
       setNewFaqAnswer("");
       setNewFaqCategory("general");
       setAddFaqOpen(false);
 
-      alert("FAQ saved successfully");
+      alert("FAQ saved to backend successfully");
     } catch (err) {
-      console.error("Failed to save FAQ", err);
-      alert("Failed to save FAQ to backend");
+      console.warn("Failed to save FAQ to backend - saving to localStorage instead", err);
+
+      // fallback: write to localStorage
+      try {
+        const local = readLocalFaqs();
+
+        // create a local id so it shows in UI
+        const localId = `local-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+        const localEntry: FaqItem = {
+          id: localId,
+          title,
+          content,
+          category,
+        };
+
+        const merged = [...local, localEntry];
+        writeLocalFaqs(merged);
+
+        setFaqs(merged);
+
+        // reset modal
+        setNewFaqQuestion("");
+        setNewFaqAnswer("");
+        setNewFaqCategory("general");
+        setAddFaqOpen(false);
+
+        alert("Backend offline — saved FAQ to localStorage");
+      } catch (err2) {
+        console.error("Failed to save FAQ to localStorage", err2);
+        alert("Failed to save FAQ (backend & localStorage both failed)");
+      }
     }
   };
 
