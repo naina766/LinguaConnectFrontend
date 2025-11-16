@@ -1,3 +1,4 @@
+// src/components/KnowledgeBase.tsx
 import { useState, useEffect } from "react";
 import {
   Search,
@@ -20,6 +21,7 @@ import {
 
 import { AuthModal } from "./AuthModal";
 import { ChatInterface } from "./ChatInterface";
+import axios from "axios";
 
 interface Article {
   id: string;
@@ -28,7 +30,6 @@ interface Article {
   category: string;
 }
 
-// DEFAULT categories
 const categoriesList = [
   { id: "account", name: "Account", icon: HelpCircle },
   { id: "billing", name: "Billing", icon: CreditCard },
@@ -48,7 +49,6 @@ export function KnowledgeBase() {
 
   const isAuth = localStorage.getItem("isAuthenticated") === "true";
 
-  // STATIC 9 ARTICLES (from your older version)
   const staticArticles: Article[] = [
     {
       id: "1",
@@ -74,15 +74,13 @@ export function KnowledgeBase() {
     {
       id: "4",
       title: "What payment methods do you accept?",
-      content:
-        "We accept Visa, MasterCard, PayPal, and enterprise bank transfers.",
+      content: "We accept Visa, MasterCard, PayPal, and enterprise bank transfers.",
       category: "billing",
     },
     {
       id: "5",
       title: "How do I upgrade my plan?",
-      content:
-        'Navigate to Dashboard > Billing > Plans. Click "Upgrade" and select your plan.',
+      content: 'Navigate to Dashboard > Billing > Plans. Click "Upgrade" and select your plan.',
       category: "billing",
     },
     {
@@ -94,64 +92,91 @@ export function KnowledgeBase() {
     {
       id: "7",
       title: "Translation not working correctly",
-      content:
-        "Check selected languages, clear cache, verify system status page.",
+      content: "Check selected languages, clear cache, verify system status page.",
       category: "troubleshooting",
     },
     {
       id: "8",
       title: "Chat interface is slow",
-      content:
-        "Disable browser extensions, try another browser or clear cache.",
+      content: "Disable browser extensions, try another browser or clear cache.",
       category: "troubleshooting",
     },
     {
       id: "9",
       title: "Messages not sending",
-      content:
-        "Check your internet connection and reload the page. Verify account status.",
+      content: "Check your internet connection and reload the page. Verify account status.",
       category: "troubleshooting",
     },
   ];
 
-  // 🔥 LOAD DYNAMIC FAQ FROM LOCAL STORAGE
   useEffect(() => {
-    const raw = localStorage.getItem("faqs");
-    if (!raw) {
-      setDynamicFaq([]);
-      return;
-    }
+    let mounted = true;
 
-    try {
-      const parsed = JSON.parse(raw);
+    const loadFaqs = async () => {
+      try {
+        const res = await axios.get("http://localhost:4001/api/faqs");
+        const data = res.data?.data || [];
 
-      // Convert uploaded FAQ formats → Articles
-      const normalised: Article[] = parsed.map((item: any) => ({
-        id: String(item.id || Date.now() + Math.random()),
-        title: item.title || "FAQ",
-        content: item.text || item.content || "",
-        category:
-          item.category && categoriesList.some((c) => c.id === item.category)
-            ? item.category
-            : "general",
-      }));
+        if (!mounted) return;
 
-      setDynamicFaq(normalised);
-    } catch {
-      setDynamicFaq([]);
-    }
+        const normalised: Article[] = data.map((item: any, i: number) => ({
+          id: String(item.id ?? item._id ?? `backend-${i}-${Date.now()}`),
+          title: item.title || item.question || item.q || "FAQ",
+          content: item.content || item.answer || item.text || "",
+          category:
+            item.category && categoriesList.some((c) => c.id === item.category)
+              ? item.category
+              : "general",
+        }));
+
+        setDynamicFaq(normalised);
+
+        try {
+          localStorage.setItem("faqs", JSON.stringify(data));
+        } catch {}
+
+        return;
+      } catch (err) {
+        console.warn("Backend failed, using localStorage", err);
+      }
+
+      try {
+        const raw = localStorage.getItem("faqs");
+        if (!raw) {
+          setDynamicFaq([]);
+          return;
+        }
+        const parsed = JSON.parse(raw);
+        const normalised: Article[] = parsed.map((item: any, i: number) => ({
+          id: String(item.id ?? item._id ?? `local-${i}-${Date.now()}`),
+          title: item.title || item.question || item.q || "FAQ",
+          content: item.content || item.answer || item.text || "",
+          category:
+            item.category && categoriesList.some((c) => c.id === item.category)
+              ? item.category
+              : "general",
+        }));
+        setDynamicFaq(normalised);
+      } catch (err) {
+        setDynamicFaq([]);
+      }
+    };
+
+    loadFaqs();
+    return () => {
+      mounted = false;
+    };
   }, []);
 
-  // 🔥 Merge static + dynamic
   const allArticles: Article[] = [...staticArticles, ...dynamicFaq];
 
-  // Filter by selected category + search
   const filteredArticles = allArticles.filter((article) => {
     const matchCategory = article.category === selectedCategory;
-    const matchSearch = searchQuery
-      ? article.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        article.content.toLowerCase().includes(searchQuery.toLowerCase())
-      : true;
+    const matchSearch =
+      searchQuery
+        ? article.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          article.content.toLowerCase().includes(searchQuery.toLowerCase())
+        : true;
 
     return matchCategory && matchSearch;
   });
@@ -166,10 +191,8 @@ export function KnowledgeBase() {
   const currentLanguage =
     languages.find((l) => l.code === selectedLanguage) || languages[0];
   const currentCategory =
-    categoriesList.find((c) => c.id === selectedCategory) ||
-    categoriesList[0];
+    categoriesList.find((c) => c.id === selectedCategory) || categoriesList[0];
 
-  // Chat controls
   function handleStartChat() {
     if (!isAuth) setShowAuthModal(true);
     else setShowChat(true);
@@ -183,7 +206,6 @@ export function KnowledgeBase() {
 
   return (
     <div className="min-h-[calc(100vh-4rem)]">
-      {/* Chat Modal */}
       {showChat && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100]">
           <div className="bg-white rounded-xl shadow-2xl p-4 max-w-3xl w-full">
@@ -198,7 +220,6 @@ export function KnowledgeBase() {
         </div>
       )}
 
-      {/* Auth Modal */}
       <AuthModal
         isOpen={showAuthModal}
         onClose={() => setShowAuthModal(false)}
@@ -206,24 +227,18 @@ export function KnowledgeBase() {
         onSuccess={handleAuthSuccess}
       />
 
-      {/* Header */}
+      {/* HEADER */}
       <div className="bg-gradient-to-br from-[#007BFF] to-[#00B5AD] text-white py-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between mb-8">
             <div>
               <h1 className="mb-2">Knowledge Base</h1>
-              <p className="text-blue-100">
-                Find answers to common questions in your preferred language
-              </p>
+              <p className="text-blue-100">Find answers to common questions in your preferred language</p>
             </div>
 
-            {/* Language Switcher */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button
-                  variant="outline"
-                  className="bg-white/10 border-white/20 text-white hover:bg-white/20"
-                >
+                <Button variant="outline" className="bg-white/10 border-white/20 text-white hover:bg-white/20">
                   <Globe className="w-4 h-4 mr-2" />
                   <span>{currentLanguage.flag}</span>
                   <span className="ml-1">{currentLanguage.name}</span>
@@ -248,7 +263,6 @@ export function KnowledgeBase() {
             </DropdownMenu>
           </div>
 
-          {/* Search */}
           <div className="relative max-w-2xl">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
             <Input
@@ -261,10 +275,10 @@ export function KnowledgeBase() {
         </div>
       </div>
 
-      {/* Main Content */}
+      {/* MAIN CONTENT */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="flex gap-8">
-          {/* Sidebar */}
+          {/* SIDEBAR */}
           <div className="w-64 flex-shrink-0">
             <div className="bg-white rounded-xl border p-4 sticky top-20">
               <h3 className="text-gray-900 mb-4">Categories</h3>
@@ -290,33 +304,25 @@ export function KnowledgeBase() {
                 })}
               </nav>
 
-              {/* Chat Button */}
               <div className="mt-6 pt-6 border-t">
                 <div className="bg-gradient-to-br from-blue-50 to-white p-4 rounded-lg border">
                   <BookOpen className="w-8 h-8 text-[#007BFF] mb-2" />
                   <p className="text-gray-900 mb-1">Need more help?</p>
-                  <p className="text-gray-600 mb-3">
-                    Chat with our AI assistant
-                  </p>
+                  <p className="text-gray-600 mb-3">Chat with our AI assistant</p>
 
-                  <Button
-                    className="w-full bg-[#007BFF] hover:bg-[#0056b3]"
-                    onClick={handleStartChat}
-                  >
+                  <Button className="w-full bg-[#007BFF] hover:bg-[#0056b3]" onClick={handleStartChat}>
                     Start Chat
                   </Button>
 
                   {!isAuth && (
-                    <p className="text-xs text-red-500 text-center mt-2">
-                      Login required to chat
-                    </p>
+                    <p className="text-xs text-red-500 text-center mt-2">Login required to chat</p>
                   )}
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Articles */}
+          {/* ARTICLES */}
           <div className="flex-1">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-gray-900">{currentCategory.name}</h2>
@@ -326,14 +332,28 @@ export function KnowledgeBase() {
               </div>
             </div>
 
+            {/* CLEAN FIXED FAQ LIST */}
             <div className="space-y-4">
-              {filteredArticles.map((a) => (
+              {filteredArticles.map((a, index) => (
                 <div
                   key={a.id}
                   className="bg-white rounded-xl border p-6 hover:shadow-md transition-shadow"
                 >
-                  <h3 className="text-gray-900 mb-2">{a.title}</h3>
-                  <p className="text-gray-600 mb-4">{a.content}</p>
+                  {/* FAQ NUMBER ONLY */}
+                  <div className="inline-flex items-center gap-2 bg-gray-200 px-3 py-1 rounded-full mb-3">
+                    <span className="text-gray-800 font-semibold text-sm">
+                      {/* FAQ {index + 1} */}
+                    </span>
+                  </div>
+
+                  {/* TITLE WITHOUT DUPLICATION */}
+                  <h3 className="text-gray-900 mb-2 text-lg font-semibold">
+                    {a.title}
+                  </h3>
+
+                  <p className="text-gray-600 mb-4 whitespace-pre-line">
+                    {a.content}
+                  </p>
 
                   <div className="inline-flex items-center gap-1 bg-blue-50 px-3 py-1 rounded-full">
                     <span className="text-[#007BFF]">
@@ -348,9 +368,7 @@ export function KnowledgeBase() {
               <div className="text-center py-16">
                 <BookOpen className="w-16 h-16 text-gray-300 mx-auto mb-4" />
                 <h3 className="text-gray-900 mb-2">No articles found</h3>
-                <p className="text-gray-600">
-                  Try adjusting your search or category
-                </p>
+                <p className="text-gray-600">Try adjusting your search or category</p>
               </div>
             )}
           </div>
@@ -359,3 +377,5 @@ export function KnowledgeBase() {
     </div>
   );
 }
+
+export default KnowledgeBase;
