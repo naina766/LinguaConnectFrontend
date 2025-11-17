@@ -556,69 +556,79 @@ const stopAudioRecording = () => {
   // SEND MESSAGE (only ONE sendMsg, async)
   // -----------------------------
   const sendMsg = async () => {
-    if (!inputMessage.trim()) return;
+  if (!inputMessage.trim()) return;
 
-    if (demoMode && demoCount >= 10) {
-      setDemoLimitPopup(true);
-      return;
-    }
+  if (demoMode && demoCount >= 10) {
+    setDemoLimitPopup(true);
+    return;
+  }
 
-    const userMsg: Message = {
-      id: Date.now().toString(),
-      text: inputMessage,
-      sender: "user",
+  const userMsg: Message = {
+    id: Date.now().toString(),
+    text: inputMessage,
+    sender: "user",
+    timestamp: Date.now(),
+    language: selectedLanguage,
+  };
+
+  setMessages((prev) => {
+    const next = [...prev, userMsg];
+    writeStoredMessages(next);
+    return next;
+  });
+
+  if (demoMode) {
+    const newCount = demoCount + 1;
+    setDemoCount(newCount);
+    localStorage.setItem("demoCount", String(newCount));
+  }
+
+  setInputMessage("");
+  setAiTyping(true);
+
+  try {
+    const res = await axios.post(
+      "https://linguaconnect-hackathon-1.onrender.com/api/chatbot/reply",
+      { question: userMsg.text }
+    );
+
+    const replyText =
+      res.data?.data?.botReplyTranslated ||
+      res.data?.data?.botReplyOriginal ||
+      res.data?.reply ||
+      "No reply received.";
+
+    console.log("AI reply:", replyText);
+
+    const aiMsg: Message = {
+      id: (Date.now() + 1).toString(),
+      text: replyText,
+      sender: "assistant",
       timestamp: Date.now(),
       language: selectedLanguage,
     };
 
     setMessages((prev) => {
-      const next = [...prev, userMsg];
+      const next = [...prev, aiMsg];
       writeStoredMessages(next);
       return next;
     });
-
-    if (demoMode) {
-      const newCount = demoCount + 1;
-      setDemoCount(newCount);
-      localStorage.setItem("demoCount", String(newCount));
-    }
-
-    setInputMessage("");
-    setAiTyping(true);
-
-    try {
-      const res = await axios.post("https://linguaconnect-hackathon-1.onrender.com/api/chatbot/reply", {
-        question: userMsg.text,
-      });
-
-      const aiMsg: Message = {
-        id: (Date.now() + 1).toString(),
-        text: res.data.reply || "No reply",
+  } catch (err) {
+    console.error("Text send failed", err);
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: (Date.now() + 2).toString(),
+        text: "Failed to get AI reply.",
         sender: "assistant",
         timestamp: Date.now(),
         language: selectedLanguage,
-      };
-      setMessages((prev) => {
-        const next = [...prev, aiMsg];
-        writeStoredMessages(next);
-        return next;
-      });
-    } catch (err) {
-      console.error("Text send failed", err);
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: (Date.now() + 2).toString(),
-          text: "Failed to get AI reply.",
-          sender: "assistant",
-          timestamp: Date.now(),
-          language: selectedLanguage,
-        },
-      ]);
-    } finally {
-      setAiTyping(false);
-    }
-  };
+      },
+    ]);
+  } finally {
+    setAiTyping(false);
+  }
+};
 
   // auto-scroll to bottom when messages change or aiTyping toggles
   useEffect(() => {
