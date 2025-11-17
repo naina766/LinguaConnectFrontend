@@ -104,7 +104,7 @@
 
 //   const fetchFaqs = async () => {
 //     try {
-//       const res = await axios.get("http://localhost:4001/api/faqs");
+//       const res = await axios.get("https://linguaconnect-hackathon-1.onrender.com/api/faqs");
 //       setFaqs(res.data?.data || []);
 //     } catch (err) {
 //       console.error("Error fetching faqs:", err);
@@ -1115,7 +1115,7 @@ export function AdminDashboard() {
   // Fetch FAQs from backend and also store into localStorage for KnowledgeBase
   const fetchFaqs = async () => {
     try {
-      const res = await axios.get("http://localhost:4001/api/faqs");
+      const res = await axios.get("https://linguaconnect-hackathon-1.onrender.com/api/faqs");
       const data = res.data?.data || [];
 
       // normalize to simple objects we store locally (backend may return different fields)
@@ -1255,7 +1255,7 @@ export function AdminDashboard() {
         } catch (err) {
           // try bulk endpoint
           try {
-            await axios.post("http://localhost:4001/api/faqs/bulk", {
+            await axios.post("https://linguaconnect-hackathon-1.onrender.com/api/faqs/bulk", {
               faqs: faqsJson,
             });
             uploaded = true;
@@ -1395,7 +1395,7 @@ export function AdminDashboard() {
     if (!question) return alert("Enter a question first");
     setGeneratingAnswer(true);
     try {
-      const res = await axios.post("http://localhost:4001/api/chatbot/reply", {
+      const res = await axios.post("https://linguaconnect-hackathon-1.onrender.com/api/chatbot/reply", {
         question,
       });
       const reply =
@@ -1424,7 +1424,7 @@ export function AdminDashboard() {
 
     try {
       // try to save to backend
-      await axios.post("http://localhost:4001/api/faqs", payload);
+      await axios.post("https://linguaconnect-hackathon-1.onrender.com/api/faqs", payload);
 
       // refresh from backend and localStorage
       await fetchFaqs();

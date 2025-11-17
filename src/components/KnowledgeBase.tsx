@@ -139,7 +139,7 @@
 
 //     const loadFaqs = async () => {
 //       try {
-//         const res = await axios.get("http://localhost:4001/api/faqs");
+//         const res = await axios.get("https://linguaconnect-hackathon-1.onrender.com/api/faqs");
 //         const data = res.data?.data || [];
 
 //         if (!mounted) return;

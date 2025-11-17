@@ -439,7 +439,7 @@ const sendAudioToBackend = async (audioBlob: Blob) => {
     fd.append("language", selectedLanguage);
 
     const res = await axios.post(
-      "http://localhost:4001/api/audio/audio-chat",
+      "https://linguaconnect-hackathon-1.onrender.com/api/audio/audio-chat",
       fd,
       {
         headers: { "Content-Type": "multipart/form-data" },
@@ -587,7 +587,7 @@ const stopAudioRecording = () => {
     setAiTyping(true);
 
     try {
-      const res = await axios.post("http://localhost:4001/api/chatbot/reply", {
+      const res = await axios.post("https://linguaconnect-hackathon-1.onrender.com/api/chatbot/reply", {
         question: userMsg.text,
       });
 
