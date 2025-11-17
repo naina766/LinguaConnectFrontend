@@ -1,7 +1,7 @@
 import axios from "axios";
 
 const api = axios.create({
-  baseURL: "http://localhost:4001", // your backend URL
+  baseURL: "https://linguaconnect-hackathon.onrender.com", // your backend URL
   withCredentials: true,
 });
 
