@@ -1397,7 +1397,7 @@ export function AdminDashboard() {
     try {
       const res = await axios.post("https://linguaconnect-hackathon-1.onrender.com/api/chatbot/reply", {
         question,
-      });
+      },{withCredentials:true});
       const reply =
         res.data?.reply ||
         res.data?.data?.reply ||
